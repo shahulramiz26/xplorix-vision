@@ -1,76 +1,34 @@
-# XPLORIX — Drilling Intelligence Platform (MVP v2)
+# XPLORIX Pulse · Copilot
 
-> This repository is the **MVP / demo**. Deploy it with **no database** (no `DATABASE_URL`): it runs as the demo company, with the 15-day trial login and **Login As** to pick a role. The live pilot site with real customer logins is a separate repository and is not affected by anything here.
+XPLORIX Copilot is an AI agent that runs inside XPLORIX Pulse. Add it, and it reads every sensor reading on every rig, every second, together with what XPLORIX knows about each rig, and tells the crew **what to do, how to do it, and why**. Then it watches the readings and says whether it worked.
 
-One record of the drilling, for both sides of the contract. XPLORIX is built for exploration drilling contractors and the mine owners they drill for: the supervisor logs each shift once at the rig, and cost per metre, profit per hole, contractor checks, the client's approvals and invoices, and the forecast are all worked out from that record.
+Run: `npm install && npm run dev`, open `/pulse`, press **Add XPLORIX Copilot**.
 
-## Four logins
+## What Copilot does
 
-| Login | Sees |
-| --- | --- |
-| Company admin | Everything in the company |
-| Supervisor | His projects' rigs and logs. No rates, no costs, no invoices |
-| Contractor (sub-contractor) | His own work orders, shifts, logs and bills |
-| Client (mine owner) | The shift record without fuel, parts or crew cost; his rates, holes and invoices |
-
-The rules are enforced on the server (`lib/server/policy.ts`), not only on the screens.
-
-## What is in it
-
-- **Drill log** with checks as the shift is typed: figures that cannot be right are stopped, unusual ones are saved only with a reason (`lib/log-checks.ts`)
-- **Dashboard** with what needs the owner today
-- **Finance and costing**: cost per metre by day, profit per hole, standby billed
-- **Contractors**: shifts checked before they count, bills checked against the record
-- **Client portal**: hole approvals, invoices checked line by line
-- **Analytics**: six dashboards, each with XPLORIX insights
-- **XPLORIX Intelligence**: Today (one list of findings across every department, with owner, deadline and money), Drill log check, Money checks (standby that reached no invoice, holes blocked by their logs, fuel against the engine), Price a tender (rates per metre by ground, size and depth from the company's own costed metres), Contractor comparison, Hole finish prediction, This month and next, Risk analysis (`lib/findings.ts`, `lib/money-checks.ts`, `lib/own-rates.ts`, `lib/intelligence.ts`, `lib/forecast.ts`)
-- **Supervisor Today**: his rigs, shifts not logged, and his logs the checks want put right
-- **Contractor and client**: sub-contractor reports run through the same checks before they are accepted; the client sees "Checked by XPLORIX" on holes and invoices whose every shift passed
-- **XPLORIX Core (Geology)**: the geologist's half, joined to the drilling record. Real tray photos (NVCL) measured in the browser: recovery, RQD, RQD from joint density, incoherence, fractures, joint sets, GSI, weathering, discing, rock classes. Then:
-  - **Vein classes**: every vein found on the photos, sorted into four classes the geologist names; vein volume down every hole
-  - **Chips (RC)**: chip-tray compartments read chip by chip (area, perimeter, eccentricity, shape, colour), grouped across RC holes; measures an uploaded chip photo too
-  - **Check logs**: the geologist's lithology and RQD log checked against the photos, metre by metre; CSV import
-  - **Downhole data**: assays, geophysics, core scanner (XRF, hyperspectral), televiewer and lab UCS on one depth scale; any interval CSV imports
-  - **Domains**: every metre grouped by photo + chemistry + geophysics (k-means, PCA map), side by side with the log
-  - **Predictions**: rock strength, main mineral and probe RQD where nobody measured, scored on holes left out
-  - **Structures**: true dip and dip direction from alpha, beta and the hole survey; stereonets and joint sets
-  - **Photo archive**: a whole folder of old tray photos read in one go
-  - **XPLORIX AI**: Ask XPLORIX answers from the core record on every Geology screen (Ctrl J), with a full page and a morning brief (`lib/ai/core-ask.ts`)
-  - Sample data: the company has no assays, scans, televiewer, lab tests, hand logs or RC holes, so these are generated from what each real photographed metre shows (`lib/core/downhole.ts`, `lib/core/chips.ts`) and marked "Sample" on screen. Imports replace them.
-- **Parts and inventory**: what runs out before an order can arrive, late orders, idle stock; a new order is checked against every other store first, and part life is measured by ground (`lib/stock-checks.ts`)
-
-Every insight and forecast is a rule or a projection applied to the company's own record. It is not a trained model. An AI layer that explains causes and drafts actions is planned, and will read the same findings.
-
-Sample screens, not connected to real data yet: Bid Intelligence, Marketplace, Crew & jobs, Performance reports, Billing.
-
-## Run it
-
-```bash
-npm install
-npm run dev
-```
-
-To connect a database, set `DATABASE_URL` (see `.env.example`). With no database the app runs as a demo company (Apex Drilling Solutions), kept in the browser and frozen on 13 Sep 2026 so the figures stay the same. On the login page, any email and password work and **Login As** picks the role.
-
-## Tech
-
-Next.js 14 (App Router), TypeScript, Tailwind CSS, Recharts, Lucide icons, Postgres when a database is connected.
-
-## XPLORIX Vision
-
-This repo starts from the XPLORIX MVP and adds the vision as working screens, under **Vision** in the admin menu (`/admin/vision`):
-
-| Stage | Screen | Path |
+| | Feature | Example |
 |---|---|---|
-| Today | Digital twin, Pulse, Intelligence, AI Scorecard | existing MVP screens |
-| Launch | Copilot cockpit: ground-ahead radar, best settings, countdowns, voice (EN/AR), shift log that writes itself | `/admin/vision/copilot` |
-| Launch | Command centre: advice given, followed, proven; crew scorecard | `/admin/vision/command` |
-| Year 2 | Geology GPS: stop the hole when the target is passed | `/admin/vision/gps` |
-| Year 2 | Fleet brain: best way to drill each ground; radar checked against core | `/admin/vision/brain` |
-| Year 2–3 | Autopilot levels 2 and 3 (switch in the cockpit) | `/admin/vision/copilot` |
-| Year 3+ | Level 4: one person, the whole fleet | `/admin/vision/autonomy` |
-| Year 3+ | Self-running back office | `/admin/vision/backoffice` |
+| ① | Sees the rock ahead (from the cored holes around the rig) | "Broken ground in 0.9 m. Ease to 760 rpm and 16 kN, shorten runs." |
+| ② | Guards the money | "Client standby: SAR 510 billable so far. Log it now." / "Costing SAR 1,039 a metre; the contract pays SAR 700." |
+| ③ | Protects core quality | "Core being lost: recovery heading for about 82%." |
+| ④ | Catches failures early | Bit blocking, engine losing its cooling, water pump wearing out |
+| ⑤ | Says when to stop a hole (Geology GPS) | "No target left below: stop at 155 m and save 45 m." |
+| ⑥ | Writes the shift logs | From the sensors, the crew's actions and what the driller says |
+| ⑦ | Checks its own advice | "Worked: pressure back to 16.8 bar. 1.5 h saved." Each card shows "worked 26 of 31 times." |
 
-`/admin/vision/copilot?story=1` plays the 3-minute demo story.
+Plus: three levels (Advise, Assist: one-tap apply to rig, Auto: Copilot adjusts within safe limits), voice in English, Arabic, Hindi and Urdu, ask by voice or text, and urgent advice nobody answers in a minute goes to the supervisor.
 
-Rig readings are simulated (`lib/copilot/sim.ts`). The rock ahead, holes, speeds, crews, costs and parts come from the MVP record (`lib/copilot/context.ts`, `lib/copilot/ground.ts`). Copilot's advice is rule-based (`lib/copilot/brain.ts`); outcomes are kept in the browser with 30 days of demo history (`lib/copilot/store.ts`).
+## What is real
+
+`data/xplorix-data.json` is exported from the XPLORIX MVP: rigs, holes, plans, surveys, the core of the cored holes metre by metre, each rig's normal speed by ground, the best crew in each ground, bits, contract rates and costs.
+
+The sensor readings are a model (`lib/rig.ts`); the screen says so. Copilot's brain is rules (`lib/copilot.ts`); the launch version puts trained models behind the same agent, learning from the outcomes it records (`lib/memory.ts`).
+
+## Files
+
+- `app/pulse/page.tsx`: Pulse with the Copilot switch, panel, actions and checks
+- `lib/copilot.ts`: the agent: what it watches, what it says, how, why, and the verdicts
+- `lib/ground.ts`: the rock ahead and Geology GPS
+- `lib/rig.ts`: the simulated rigs
+- `lib/ask.ts`: questions and voice logging
+- `components/rigview.tsx`: gauges, trends, hole and rock ahead
