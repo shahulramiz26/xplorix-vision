@@ -111,9 +111,11 @@ export default function PulsePage() {
   const ready = on && booting >= 4
 
   const voice = useVoice(lang, voiceMode)
-  const say = useCallback((t: Record<Lang, string> | string, prio: 0 | 1 | 2 | 3 = 2, extra: { rig?: string; key?: string } = {}) => {
-    voice.say(typeof t === 'string' ? t : t[lang], prio, extra)
-  }, [voice, lang])
+  // Speak in the chosen language if this computer has that voice; otherwise in English
+  const say = useCallback((t: Record<Lang, string> | string, prio: 0 | 1 | 2 | 3 = 2, extra: { rig?: string; key?: string; force?: boolean } = {}) => {
+    voice.say(typeof t === 'string' ? t : t[voice.speakIn], prio, extra)
+  }, [voice])
+  const allowed = (prio: number) => voiceMode === 'all' || (voiceMode === 'urgent' && prio <= 1)
 
   // What Copilot sees right now, every rig
   const advice = useMemo(() => ready ? lives.flatMap(s => think(s)).filter(a => !taken[a.key]) : [], [lives, ready, taken])
@@ -126,10 +128,29 @@ export default function PulsePage() {
     const fresh = advice.filter(a => seenAt[a.key] == null)
     if (!fresh.length) return
     setSeenAt(m => ({ ...m, ...Object.fromEntries(fresh.map(a => [a.key, Date.now()])) }))
-    fresh.filter(a => a.level !== 'info').forEach(a => { if (!spoken.current.has(a.key)) { spoken.current.add(a.key); say(a.say, a.level === 'act' ? 1 : 3, { rig: a.rig, key: a.key }) } })
+    fresh.filter(a => a.level !== 'info').forEach(a => { const p = a.level === 'act' ? 1 : 3; if (!spoken.current.has(a.key) && allowed(p)) { spoken.current.add(a.key); say(a.say, p, { rig: a.rig, key: a.key }) } })
     if (level === 'auto') fresh.filter(a => a.fix.type !== 'none').forEach(a => act(a, 'auto'))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advice.map(a => a.key).join('|'), ready, level])
+
+  // Voice switched on, made louder or language changed: say what is waiting that was not said yet
+  useEffect(() => {
+    if (!ready || voiceMode === 'off') return
+    const todoNow = advice.filter(a => a.level !== 'info').sort((a, b) => (a.level === 'act' ? 0 : 1) - (b.level === 'act' ? 0 : 1))
+    todoNow.forEach(a => { const p = a.level === 'act' ? 1 : 3; if (!spoken.current.has(a.key) && allowed(p)) { spoken.current.add(a.key); say(a.say, p, { rig: a.rig, key: a.key }) } })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceMode, lang, ready])
+
+  // Act-now advice nobody answered for a minute: say it once more
+  const reminded = useRef(new Set<string>())
+  useEffect(() => {
+    if (!ready) return
+    advice.filter(a => a.level === 'act' && seenAt[a.key] != null && Date.now() - seenAt[a.key] > 60000 && !reminded.current.has(a.key)).slice(0, 1).forEach(a => {
+      reminded.current.add(a.key)
+      say({ en: `Still waiting. ${a.say.en}`, ar: `ما زلنا ننتظر. ${a.say.ar}`, hi: `अभी भी इंतज़ार है। ${a.say.hi}`, ur: `ابھی بھی انتظار ہے۔ ${a.say.ur}` }, 1, { rig: a.rig, key: a.key })
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lives, ready])
 
   const addLog = (rig: string, depth: number, text: string, kind: LogLine['kind'] = 'copilot', minutes?: number) =>
     setLogs(l => [...l, { at: lives.find(x => x.rig.rig === rig)?.t ?? 0, rig, depth: Math.round(depth * 10) / 10, text, kind, minutes }])
@@ -356,6 +377,7 @@ export default function PulsePage() {
                     {LANGS.map(l => <button key={l.v} aria-pressed={lang === l.v} onClick={() => setLang(l.v)}>{l.label}</button>)}
                   </div>
                 </div>
+                <VoiceHelp voice={voice} lang={lang} mode={voiceMode} onTest={() => say({ en: 'Copilot voice is working. You will hear act now advice like this.', ar: 'صوت كوبايلت يعمل.', hi: 'कोपायलट की आवाज़ काम कर रही है।', ur: 'کوپائلٹ کی آواز کام کر رہی ہے۔' }, 0, { force: true })} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   <Stat label="To do" value={String(todo.length)} tone={todo.some(a => a.level === 'act') ? 'var(--red)' : todo.length ? 'var(--amber)' : 'var(--green)'} />
                   <Stat label="At stake" value={`SAR ${r0(atStake)}`} tone="var(--orange)" />
@@ -379,7 +401,7 @@ export default function PulsePage() {
 
               {focus ? (
                 <Focus a={focus} lang={lang} level={level} record={mem.record[focus.kind]} escalated={escalated(focus)} speaking={voice.now?.key === focus.key}
-                  onPick={() => setSel(focus.rig)} onDone={() => act(focus, 'done')} onApply={() => act(focus, 'applied')} onLater={() => act(focus, 'later')} />
+                  onSpeak={() => say(focus.say, 0, { rig: focus.rig, key: focus.key, force: true })} onPick={() => setSel(focus.rig)} onDone={() => act(focus, 'done')} onApply={() => act(focus, 'applied')} onLater={() => act(focus, 'later')} />
               ) : (
                 <section className="card" style={{ padding: 16, display: 'flex', gap: 10, alignItems: 'center' }}><BadgeCheck size={20} color="var(--green)" /><div><div style={{ fontWeight: 600 }}>Every rig is running well</div><div style={{ fontSize: 13, color: 'var(--muted)' }}>Copilot is watching every reading.</div></div></section>
               )}
@@ -492,9 +514,9 @@ function LevelTag({ level }: { level: Advice['level'] }) {
 }
 
 /* The one thing to do now, big enough to read and tap at the rig. */
-function Focus({ a, lang, level, record, escalated, speaking, onPick, onDone, onApply, onLater }: {
+function Focus({ a, lang, level, record, escalated, speaking, onSpeak, onPick, onDone, onApply, onLater }: {
   a: Advice; lang: Lang; level: CLevel; record?: { worked: number; of: number }; escalated: boolean; speaking: boolean
-  onPick: () => void; onDone: () => void; onApply: () => void; onLater: () => void
+  onSpeak: () => void; onPick: () => void; onDone: () => void; onApply: () => void; onLater: () => void
 }) {
   const canApply = a.fix.type !== 'none'
   const primaryApply = level !== 'advise' && canApply
@@ -504,7 +526,9 @@ function Focus({ a, lang, level, record, escalated, speaking, onPick, onDone, on
         <LevelTag level={a.level} />
         <button onClick={onPick} className="mono" style={{ background: 'none', border: 'none', color: 'var(--text)', fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: '6px 2px', textDecoration: 'underline', textDecorationColor: 'var(--line3)', textUnderlineOffset: 3 }}>{a.rig}</button>
         <span style={{ fontSize: 12.5, color: 'var(--faint)' }}>{KIND_LABEL[a.kind]}</span>
-        {speaking && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Volume2 size={13} /> Speaking</span>}
+        {speaking
+          ? <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Volume2 size={13} /> Speaking</span>
+          : <button className="btn btn-sm" onClick={onSpeak} style={{ marginLeft: 'auto' }} aria-label="Say this out loud"><Volume2 size={14} /> Say it</button>}
       </div>
       {escalated && <div role="alert" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, fontWeight: 600, color: 'var(--red-t)', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.4)', borderRadius: 8, padding: '8px 10px' }}><ShieldAlert size={15} /> No answer for a minute: sent to the supervisor</div>}
       <div>
@@ -572,5 +596,24 @@ function Booting({ step }: { step: number }) {
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontWeight: 700 }}><Sparkles size={18} color="var(--orange)" /> Adding XPLORIX Copilot</div>
       {lines.map((l, i) => <div key={l} style={{ display: 'flex', gap: 9, alignItems: 'center', fontSize: 13.5, color: i < step ? 'var(--text)' : 'var(--faint)' }}>{i < step ? <Check size={15} color="var(--green)" /> : <Clock size={15} />} {l}</div>)}
     </section>
+  )
+}
+
+/* Tells the crew plainly why they hear nothing, and lets them test the sound. */
+function VoiceHelp({ voice, lang, mode, onTest }: { voice: ReturnType<typeof useVoice>; lang: Lang; mode: VoiceMode; onTest: () => void }) {
+  const name = { en: 'English', ar: 'Arabic', hi: 'Hindi', ur: 'Urdu' }[lang]
+  const note = !voice.supported ? 'This browser cannot speak. Use Chrome or Edge, or read the cards.'
+    : voice.status === 'blocked' ? 'The browser blocked sound. Press Test voice once to allow it.'
+    : lang !== 'en' && !voice.hasVoice(lang) ? `This computer has no ${name} voice, so Copilot speaks English and shows ${name} on the card.`
+    : mode === 'off' ? 'Voice is off. Copilot only shows advice on screen.'
+    : mode === 'urgent' ? 'Speaks only Act now advice and answers, once each. Press Say it on a card to hear it again.'
+    : 'Speaks every new item once, one at a time. Press Say it on a card to hear it again.'
+  const warn = !voice.supported || voice.status === 'blocked' || (lang !== 'en' && !voice.hasVoice(lang))
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, lineHeight: 1.45, color: warn ? 'var(--amber)' : 'var(--faint)' }}>
+      {warn ? <AlertTriangle size={14} style={{ flexShrink: 0 }} aria-hidden /> : <Info size={14} style={{ flexShrink: 0 }} aria-hidden />}
+      <span style={{ flex: 1 }}>{note}</span>
+      <button className="btn btn-sm" onClick={onTest}><Volume2 size={13} /> Test voice</button>
+    </div>
   )
 }
