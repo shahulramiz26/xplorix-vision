@@ -1,14 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Radio, Sparkles, Power, Mic, MicOff, Send, Volume2, VolumeX, Check, Clock, ShieldAlert, Play, Pause, ChevronDown, ChevronUp, Bot, Wrench, FileText, BadgeCheck } from 'lucide-react'
+import { Radio, Sparkles, Power, Mic, MicOff, Send, Volume2, VolumeX, Check, Clock, ShieldAlert, Play, Pause, Bot, Wrench, FileText, BadgeCheck, Sun, Moon, ChevronRight, AlertTriangle, Eye, Info, Languages, MessageSquare, ListChecks, Gauge } from 'lucide-react'
 import { RIGS, openRig, tick, clampSettings, NORMAL, liveCost, type Live } from '../../lib/rig'
 import { think, verdict, type Advice, type Lang } from '../../lib/copilot'
 import { answer, type LogLine } from '../../lib/ask'
 import { memory, useMemory } from '../../lib/memory'
 import { ratePerMetre } from '../../lib/data'
 import { nextBroken } from '../../lib/ground'
-import { Gauges, Trends, HoleStrip, KIND_LABEL } from '../../components/rigview'
+import { Readings, Streams, HoleStrip, Spark, KIND_LABEL } from '../../components/rigview'
+import { normalRop } from '../../lib/data'
 import { useVoice, type VoiceMode } from '../../lib/voice'
 
 /* ==========================================================================
@@ -60,8 +61,9 @@ export default function PulsePage() {
   const [chat, setChat] = useState<{ who: 'you' | 'copilot'; text: string }[]>([])
   const [typed, setTyped] = useState('')
   const [listening, setListening] = useState(false)
-  const [open, setOpen] = useState<string | null>(null)
-  const [closed, setClosed] = useState<Record<string, boolean>>({})
+  const [focusKey, setFocusKey] = useState<string | null>(null)
+  const [tab, setTab] = useState<'ask' | 'checked' | 'logs'>('ask')
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const [reads, setReads] = useState(0)
   const [sent, setSent] = useState<Record<string, boolean>>({})
   const later = useRef<Later[]>([])
@@ -71,6 +73,9 @@ export default function PulsePage() {
 
   useEffect(() => { setOn(readStored('xplorix-copilot-on', false)); setLevel(readStored('xplorix-copilot-level', 'advise')); setLang(readStored('xplorix-copilot-lang', 'en')); setVoiceMode(readStored('xplorix-copilot-voice', 'urgent')) }, [])
   useEffect(() => { writeStored('xplorix-copilot-voice', voiceMode) }, [voiceMode])
+  const themeLoaded = useRef(false)
+  useEffect(() => { const t = readStored<'dark' | 'light'>('xplorix-theme', 'dark'); themeLoaded.current = true; setTheme(t); document.documentElement.dataset.theme = t }, [])
+  const pickTheme = (t: 'dark' | 'light') => { setTheme(t); document.documentElement.dataset.theme = t; writeStored('xplorix-theme', t) }
   useEffect(() => { writeStored('xplorix-copilot-on', on) }, [on])
   useEffect(() => { writeStored('xplorix-copilot-level', level) }, [level])
   useEffect(() => { writeStored('xplorix-copilot-lang', lang) }, [lang])
@@ -204,314 +209,368 @@ export default function PulsePage() {
   const atStake = advice.reduce((s, a) => s + (a.money ?? 0), 0)
   const byRig = (rig: string) => advice.filter(a => a.rig === rig)
 
-  return (
-    <div style={{ minHeight: '100vh', padding: 'clamp(10px, 1.6vw, 20px)', display: 'grid', gap: 14, alignContent: 'start' }}>
-      {/* TOP BAR */}
-      <header style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--raised)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}><Radio size={19} color="var(--blue)" /></span>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: '.02em' }}>XPLORIX PULSE</div>
-            <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{RIGS.length} rigs · live sensors · <span className="mono">{clock(lives[0].t)}</span></div>
-          </div>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="btn" onClick={() => setRunning(r => !r)}>{running ? <><Pause size={15} /> Pause feed</> : <><Play size={15} /> Resume</>}</button>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, color: 'var(--muted)' }}>Speed
-            <select value={speed} onChange={e => setSpeed(Number(e.target.value))} aria-label="Feed speed" style={{ minHeight: 40, background: 'var(--raised)', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: 10, padding: '0 8px' }}>
-              {[1, 30, 120, 300, 600].map(v => <option key={v} value={v}>{v === 1 ? 'Real time' : `×${v}`}</option>)}
-            </select>
-          </label>
-          <button className="btn" onClick={() => { setOn(o => !o); setBooting(0) }} aria-pressed={on}
-            style={{ minHeight: 44, paddingInline: 16, background: on ? 'rgba(249,115,22,.14)' : 'var(--orange)', borderColor: 'var(--orange)', color: on ? 'var(--text)' : '#fff' }}>
-            <Sparkles size={17} /> {on ? 'XPLORIX Copilot · ON' : 'Add XPLORIX Copilot'} {on && <Power size={15} />}
-          </button>
-        </div>
-      </header>
-      <div role="note" style={{ padding: '8px 12px', borderRadius: 10, border: '1px dashed var(--line)', fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>
-        <b style={{ color: 'var(--text)' }}>Simulated sensor feed.</b> No rig is fitted with sensors yet, so the readings are a model. The rigs, holes, rock (from real core photos), speeds, best crews, bits, contract rates and costs are XPLORIX&rsquo;s real record. Copilot runs on rules today; the launch version adds trained models behind the same agent.
-      </div>
+  const todo = advice.filter(a => a.level !== 'info')
+  const noted = advice.filter(a => a.level === 'info')
+  const focus = todo.find(a => a.key === focusKey) ?? todo.find(a => a.rig === sel && a.level === 'act') ?? todo[0]
+  const rest = todo.filter(a => a !== focus)
+  const cost = liveCost(live), rate = ratePerMetre(live.rig), normal = normalRop(live.rig, live.rig.formation)
+  const vsNormal = live.mode === 'drilling' && normal ? live.now.rop / normal - 1 : null
+  const agentState = !on ? 'off' : !ready ? 'starting' : listening ? 'listening' : voice.now ? 'speaking' : todo.length ? 'advising' : 'watching'
 
-      <div className="grid-main" style={{ display: 'grid', gridTemplateColumns: on ? '250px minmax(0, 1fr) minmax(360px, 430px)' : '250px minmax(0, 1fr) 360px', gap: 14, alignItems: 'start' }}>
+  return (
+    <div className="app">
+      {/* SIDEBAR: dark slate, the logo on its paper tile */}
+      <aside className="sidebar" style={{ background: 'var(--side)', borderRight: '1px solid var(--side-line)', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 14px', borderBottom: '1px solid var(--side-line)' }}>
+          <span style={{ width: 36, height: 36, borderRadius: 8, background: '#F6EDE5', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} aria-hidden>
+            <svg width="26" height="26" viewBox="0 0 100 100" fill="none"><polygon points="50,50 5,5 5,95" fill="#1a1a1a" /><polygon points="50,50 5,5 30,5" fill="#2a2a2a" /><polygon points="50,50 5,95 30,95" fill="#2a2a2a" /><polygon points="50,50 95,5 95,95" fill="#F97316" /><polygon points="50,50 95,5 70,5" fill="#EA580C" /><polygon points="50,50 95,95 70,95" fill="#EA580C" /></svg>
+          </span>
+          <div><div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '.08em', color: 'var(--side-text)' }}>XPLORIX</div><div style={{ fontSize: 12, color: 'var(--side-muted)' }}>Drilling intelligence</div></div>
+        </div>
+        <nav aria-label="Main" style={{ padding: 10, display: 'grid', gap: 2 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.08em', color: 'var(--side-faint)', padding: '10px 12px 6px', textTransform: 'uppercase' }}>Operations</div>
+          <a className="side-link" href="#pulse" aria-current="page"><Radio size={17} /> Pulse · live rigs</a>
+          <a className="side-link" href="#copilot"><Sparkles size={17} /> Copilot {on && todo.length > 0 && <span className="mono" style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 700, background: 'var(--orange)', color: 'var(--on-orange)', borderRadius: 999, padding: '1px 7px' }}>{todo.length}</span>}</a>
+        </nav>
+        <div style={{ marginTop: 'auto', padding: 12, borderTop: '1px solid var(--side-line)', display: 'grid', gap: 8 }}>
+          <button className="side-link" style={{ background: 'transparent', border: 'none', cursor: 'pointer', width: '100%' }} onClick={() => pickTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />} {theme === 'dark' ? 'Light theme' : 'Dark theme'}</button>
+          <div style={{ fontSize: 11.5, color: 'var(--side-faint)', padding: '0 12px', lineHeight: 1.5 }}>Sensor feed simulated · record from the XPLORIX MVP</div>
+        </div>
+      </aside>
+
+      <div id="pulse" style={{ padding: 'clamp(12px, 1.8vw, 24px)', display: 'grid', gap: 16, alignContent: 'start', minWidth: 0 }}>
+        {/* TOP BAR */}
+        <header style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em' }}>Pulse</h1>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{RIGS.length} rigs on Site A North Field and Site B South Ridge</div>
+          </div>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span role="status" className="chip" style={{ minHeight: 40, padding: '0 12px', borderColor: running ? 'var(--line3)' : 'var(--amber)', color: running ? 'var(--muted)' : 'var(--amber)' }}>
+              <span className={running ? 'pingG' : ''} style={{ width: 8, height: 8, borderRadius: 4, background: running ? 'var(--green)' : 'var(--amber)' }} />
+              {running ? 'Live' : 'Paused · last reading'} <span className="mono" style={{ color: 'var(--text)' }}>{clock(lives[0].t)}</span>
+            </span>
+            <button className="btn only-narrow" onClick={() => pickTheme(theme === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Light theme' : 'Dark theme'}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</button>
+            <button className="btn" onClick={() => setRunning(r => !r)} aria-label={running ? 'Pause the feed' : 'Resume the feed'}>{running ? <Pause size={16} /> : <Play size={16} />}</button>
+            <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12.5, color: 'var(--muted)' }}>Demo speed
+              <select value={speed} onChange={e => setSpeed(Number(e.target.value))} aria-label="Demo speed" style={{ minHeight: 40, background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--line3)', borderRadius: 8, padding: '0 8px', fontSize: 13.5 }}>
+                {[1, 30, 120, 300, 600].map(v => <option key={v} value={v}>{v === 1 ? 'Real time' : `×${v}`}</option>)}
+              </select>
+            </label>
+            {on
+              ? <button className="btn" onClick={() => { setOn(false); setBooting(0); voice.clear() }} aria-pressed="true" style={{ borderColor: 'var(--orange)' }}><Sparkles size={16} color="var(--orange)" /> Copilot on <Power size={14} color="var(--faint)" /></button>
+              : <button className="btn btn-primary" onClick={() => { setOn(true); setBooting(0) }}><Sparkles size={16} /> Add XPLORIX Copilot</button>}
+          </div>
+        </header>
 
         {/* FLEET */}
-        <nav aria-label="Rigs" style={{ display: 'grid', gap: 10 }}>
+        <section aria-label="Rigs" className="fleet">
           {lives.map(s => {
             const mine = byRig(s.rig.rig)
             const worst = mine.find(a => a.level === 'act') ? 'act' : mine.find(a => a.level === 'watch') ? 'watch' : null
             const fixedNow = proven.find(p => p.rig === s.rig.rig && p.worked && Date.now() - p.at < 90000)
-            const c = !ready ? 'var(--line2)' : worst ? LEVEL_C[worst] : 'var(--green)'
+            const stripe = !ready ? 'var(--line3)' : worst === 'act' ? 'var(--red)' : worst === 'watch' ? 'var(--amber)' : 'var(--green)'
+            const isSel = sel === s.rig.rig
             return (
-              <button key={s.rig.rig} className="rigcard" onClick={() => setSel(s.rig.rig)} aria-pressed={sel === s.rig.rig}
-                style={{ textAlign: 'left', cursor: 'pointer', background: 'var(--panel)', color: 'var(--text)', border: `1px solid ${sel === s.rig.rig ? 'var(--orange)' : 'var(--line)'}`, boxShadow: sel === s.rig.rig ? '0 0 0 1px var(--orange)' : 'none', borderRadius: 14, padding: '11px 12px', position: 'relative', overflow: 'hidden' }}>
-                <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: c }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="mono" style={{ fontWeight: 700, fontSize: 14 }}>{s.rig.rig}</span>
-                  <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>{MODE_WORD[s.mode]}</span>
+              <button key={s.rig.rig} onClick={() => setSel(s.rig.rig)} aria-pressed={isSel} className="card"
+                style={{ textAlign: 'left', cursor: 'pointer', color: 'var(--text)', padding: '12px 13px 11px', position: 'relative', overflow: 'hidden', borderColor: isSel ? 'var(--orange)' : 'var(--line)', boxShadow: isSel ? '0 0 0 1px var(--orange)' : 'var(--shadow)', minHeight: 44 }}>
+                <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: stripe }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                  <span className="mono" style={{ fontWeight: 700, fontSize: 14.5 }}>{s.rig.rig}</span>
+                  <span style={{ fontSize: 11.5, color: s.mode === 'drilling' ? 'var(--muted)' : 'var(--amber)', fontWeight: 600 }}>{MODE_WORD[s.mode]}</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 1 }}>{s.rig.hole} · {s.rig.project.replace(' - ', ' · ')}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                  <span className="mono" style={{ fontSize: 17, fontWeight: 700 }}>{s.depth.toFixed(1)}<span style={{ fontSize: 11, color: 'var(--faint)' }}> m</span></span>
-                  <span className="mono" style={{ fontSize: 13, color: 'var(--muted)' }}>{s.now.rop.toFixed(2)} m/h</span>
+                <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.rig.hole} · {s.rig.project.split(' - ')[1] ?? s.rig.project}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}>
+                  <span className="mono" style={{ fontSize: 19, fontWeight: 700 }}>{s.depth.toFixed(1)}<span style={{ fontSize: 11, color: 'var(--faint)', fontWeight: 500 }}> m</span></span>
+                  <span className="mono" style={{ fontSize: 12.5, color: 'var(--muted)' }}>{s.now.rop.toFixed(2)} m/h</span>
                 </div>
+                <div style={{ marginTop: 4 }}><Spark s={s} /></div>
                 {on && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 12, fontWeight: 600, color: fixedNow ? 'var(--green)' : worst ? LEVEL_C[worst] : 'var(--muted)' }}>
-                    {!ready ? <><Clock size={12} /> Copilot starting…</> : fixedNow ? <><BadgeCheck size={13} /> Fixed: {KIND_LABEL[fixedNow.kind].toLowerCase()}</> : mine.length ? <><Sparkles size={12} /> {mine.length} {mine.length === 1 ? 'thing' : 'things'} to do</> : <><span className="pingG" style={{ width: 7, height: 7, borderRadius: 4, background: 'var(--green)' }} /> Copilot watching</>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, fontWeight: 600, color: fixedNow ? 'var(--green-t)' : worst === 'act' ? 'var(--red-t)' : worst === 'watch' ? 'var(--amber)' : 'var(--muted)' }}>
+                    {!ready ? <><Clock size={13} /> Starting</> : fixedNow ? <><BadgeCheck size={13} /> Fixed</> : mine.length ? <>{worst === 'act' ? <AlertTriangle size={13} /> : <Eye size={13} />} {mine.length} to do</> : <><span className="pingG" style={{ width: 7, height: 7, borderRadius: 4, background: 'var(--green)' }} /> All good</>}
                   </div>
                 )}
               </button>
             )
           })}
-        </nav>
+        </section>
 
-        {/* THE CHOSEN RIG */}
-        <main style={{ display: 'grid', gap: 14, minWidth: 0 }}>
-          <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-              <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}><span className="mono">{live.rig.rig}</span> live</h1>
-              <span style={{ fontSize: 13, color: 'var(--muted)' }}>{live.rig.hole} · {live.rig.formation.replace(' Formation', '').toLowerCase()} ground · {live.rig.size} · driller {live.rig.driller ?? '—'}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--muted)' }}>{MODE_WORD[live.mode]}{live.mode === 'standby' && live.standbyReason ? `: ${live.standbyReason.toLowerCase()}` : ''}</span>
+        <div className={`work ${on ? '' : 'off'}`}>
+          {/* THE CHOSEN RIG */}
+          <main style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+            <section className="card" style={{ padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}><span className="mono">{live.rig.rig}</span></h2>
+                <span style={{ fontSize: 13.5, color: 'var(--muted)' }}>{live.rig.hole} · {live.rig.formation.replace(' Formation', '').toLowerCase()} ground · {live.rig.size} · driller {live.rig.driller ?? '—'}</span>
+                <span className="chip" style={{ marginLeft: 'auto', color: live.mode === 'drilling' ? 'var(--green-t)' : 'var(--amber)', borderColor: live.mode === 'drilling' ? 'rgba(34,160,107,.5)' : 'var(--amber)' }}><Gauge size={13} /> {MODE_WORD[live.mode]}{live.mode === 'standby' && live.standbyReason ? `: ${live.standbyReason.toLowerCase()}` : ''}</span>
+              </div>
+              <div className="kpis" style={{ marginBottom: 14 }}>
+                <Kpi label="Depth" value={`${live.depth.toFixed(1)} m`} note={live.rig.holePlanned ? `of ${r0(live.rig.holePlanned)} m planned` : 'No plan set'} />
+                <Kpi label="Speed vs normal" value={vsNormal == null ? '—' : (Math.round(vsNormal * 100) === 0 ? 'On normal' : `${vsNormal > 0 ? '+' : '−'}${r0(Math.abs(vsNormal) * 100)}%`)} note={`Normal here ${normal.toFixed(2)} m/h`} tone={vsNormal != null && vsNormal < -0.15 ? 'var(--amber)' : 'var(--green)'} />
+                <Kpi label="Cost a metre" value={cost.perMetre ? `SAR ${r0(cost.perMetre)}` : '—'} note={`Contract pays SAR ${r0(rate)}`} tone={cost.perMetre && cost.perMetre > rate ? 'var(--red)' : 'var(--green)'} />
+                <Kpi label="Bit life" value={`${r0(Math.max(0, live.bitLife - live.bitUsed))} m`} note={`${r0(live.bitUsed)} of ${r0(live.bitLife)} m used`} tone={live.bitLife - live.bitUsed < 10 ? 'var(--amber)' : 'var(--green)'} />
+                <Kpi label="This shift" value={`${r1(live.depth - live.startDepth)} m`} note={`${r1(live.drillSecs / 3600)} h drilling · ${r0(live.litres)} L diesel`} />
+              </div>
+              <Readings s={live} />
+            </section>
+            <div className="rigbody">
+              <section className="card" style={{ padding: 16, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}><h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Last hour</h3><span style={{ fontSize: 12, color: 'var(--faint)' }}>Shaded band = normal range · triangle = out of range</span></div>
+                <Streams s={live} />
+              </section>
+              <section className="card" style={{ padding: 16 }}>
+                <h3 style={{ margin: '0 0 2px', fontSize: 15, fontWeight: 600 }}>Rock ahead</h3>
+                <div style={{ fontSize: 12, color: 'var(--faint)', marginBottom: 10 }}>From the cored holes around {live.rig.hole}</div>
+                <HoleStrip s={live} />
+              </section>
             </div>
-            <Gauges s={live} />
-          </section>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 230px', gap: 14 }} className="grid-rig">
-            <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, minWidth: 0 }}>
-              <div className="eyebrow" style={{ marginBottom: 10 }}>Last hour</div>
-              <Trends s={live} />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 12 }}>
-                {(() => { const c = liveCost(live), rate = ratePerMetre(live.rig); return <>
-                  <Mini label="Cost a metre now" v={c.perMetre ? `SAR ${r0(c.perMetre)}` : '—'} tone={c.perMetre && c.perMetre > rate ? 'var(--red)' : 'var(--green)'} note={`Contract pays SAR ${r0(rate)}`} />
-                  <Mini label="Bit" v={`${r0(Math.max(0, live.bitLife - live.bitUsed))} m left`} tone={live.bitLife - live.bitUsed < 10 ? 'var(--amber)' : 'var(--green)'} note={`${r0(live.bitUsed)} of ${r0(live.bitLife)} m used`} />
-                  <Mini label="This shift" v={`${r1(live.depth - live.startDepth)} m`} note={`${r1(live.drillSecs / 3600)} h drilling · ${r0(live.litres)} L diesel`} />
-                </> })()}
-              </div>
-            </section>
-            <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
-              <div className="eyebrow">Hole and rock ahead</div>
-              <div style={{ fontSize: 11.5, color: 'var(--faint)', margin: '4px 0 8px' }}>Below the bit: predicted from the cored holes around</div>
-              <HoleStrip s={live} />
-            </section>
-          </div>
-        </main>
+          </main>
 
-        {/* COPILOT */}
-        <aside style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
-          {!on ? <AddCopilot onAdd={() => { setOn(true); setBooting(0) }} /> : !ready ? <Booting step={booting} /> : <>
-            <section style={{ background: 'linear-gradient(160deg, rgba(249,115,22,.16), rgba(139,92,246,.08) 60%, var(--panel))', border: '1px solid rgba(249,115,22,.45)', borderRadius: 16, padding: 14, display: 'grid', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="ping" style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--orange)', display: 'grid', placeItems: 'center' }}><Bot size={18} color="#fff" /></span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: 15 }}>XPLORIX Copilot</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Reading <b className="mono" style={{ color: 'var(--text)' }}>{RIGS.length * 8}</b> values a second on {RIGS.length} rigs · <span className="mono">{r0(reads)}</span> read so far</div>
+          {/* COPILOT */}
+          <aside id="copilot" className="rail" aria-label="XPLORIX Copilot">
+            {!on ? <AddCopilot onAdd={() => { setOn(true); setBooting(0) }} /> : !ready ? <Booting step={booting} /> : <>
+              <section className="card" style={{ padding: 14, display: 'grid', gap: 12, borderColor: 'rgba(249,115,22,.45)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                  <span className={agentState === 'speaking' || agentState === 'listening' ? 'ping' : ''} style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--orange)', color: 'var(--on-orange)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    {agentState === 'speaking' ? <span className="talk" aria-hidden><span /><span /><span /><span /></span> : agentState === 'listening' ? <Mic size={19} /> : <Bot size={19} />}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15.5 }}>XPLORIX Copilot</div>
+                    <div role="status" aria-atomic="true" style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                      {agentState === 'speaking' ? 'Speaking' : agentState === 'listening' ? 'Listening' : agentState === 'advising' ? `${todo.length} thing${todo.length === 1 ? '' : 's'} to do` : 'Watching, all good'} · {RIGS.length * 8} readings a second
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <div className="seg" role="group" aria-label="Copilot level">
-                  {(['advise', 'assist', 'auto'] as CLevel[]).map(l => <button key={l} aria-pressed={level === l} onClick={() => setLevel(l)} title={{ advise: 'Copilot says, the crew does', assist: 'One tap applies it to the rig', auto: 'Copilot applies it within safe limits' }[l]}>{{ advise: 'Advise', assist: 'Assist', auto: 'Auto' }[l]}</button>)}
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <div className="seg" role="group" aria-label="How much Copilot does" style={{ width: '100%' }}>
+                    {(['advise', 'assist', 'auto'] as CLevel[]).map(l => <button key={l} aria-pressed={level === l} onClick={() => setLevel(l)} style={{ flex: 1, justifyContent: 'center' }}>{{ advise: 'Advise', assist: 'Assist', auto: 'Auto' }[l]}</button>)}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--faint)' }}>{{ advise: 'Copilot says what to do; the crew does it.', assist: 'One tap sends Copilot\'s settings to the rig.', auto: 'Copilot adjusts the rig within safe limits and says so.' }[level]}</div>
                 </div>
-                <div className="seg" role="group" aria-label="Voice">
-                  {(['off', 'urgent', 'all'] as VoiceMode[]).map(m => <button key={m} aria-pressed={voiceMode === m} onClick={() => setVoiceMode(m)} title={{ off: 'Copilot does not speak', urgent: 'Speaks only act-now advice and answers', all: 'Speaks everything, one at a time' }[m]}>{m === 'off' ? <VolumeX size={13} /> : <Volume2 size={13} />} {{ off: 'Off', urgent: 'Urgent', all: 'All' }[m]}</button>)}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className="seg" role="group" aria-label="Voice">
+                    {(['off', 'urgent', 'all'] as VoiceMode[]).map(m => <button key={m} aria-pressed={voiceMode === m} onClick={() => setVoiceMode(m)} title={{ off: 'Copilot does not speak', urgent: 'Speaks only act-now advice and answers', all: 'Speaks everything, one at a time' }[m]}>{m === 'off' ? <VolumeX size={13} /> : <Volume2 size={13} />}{{ off: 'Off', urgent: 'Urgent', all: 'All' }[m]}</button>)}
+                  </div>
+                  <div className="seg" role="group" aria-label="Language">
+                    <Languages size={13} color="var(--faint)" style={{ margin: '0 2px 0 5px', alignSelf: 'center' }} aria-hidden />
+                    {LANGS.map(l => <button key={l.v} aria-pressed={lang === l.v} onClick={() => setLang(l.v)}>{l.label}</button>)}
+                  </div>
                 </div>
-                <div className="seg" role="group" aria-label="Language">
-                  {LANGS.map(l => <button key={l.v} aria-pressed={lang === l.v} onClick={() => setLang(l.v)}>{l.label}</button>)}
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                <Kpi label="To do now" v={String(advice.filter(a => a.level !== 'info').length)} c={advice.some(a => a.level === 'act') ? 'var(--red)' : 'var(--amber)'} />
-                <Kpi label="At stake" v={`SAR ${r0(atStake)}`} c="var(--orange)" />
-                <Kpi label="Proven today" v={`${totals.fixed} · ${r1(totals.hours)} h`} c="var(--green)" />
-              </div>
-            </section>
-
-            {voice.now && (
-              <section className="slideIn" aria-live="polite" style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 10, alignItems: 'center', background: 'rgba(59,130,246,.12)', border: '1px solid rgba(59,130,246,.5)', borderRadius: 14, padding: '10px 12px' }}>
-                <span className="ping" style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--blue)', display: 'grid', placeItems: 'center' }}><Volume2 size={15} color="#fff" /></span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--blue)' }}>COPILOT IS SAYING{voice.now.rig ? ` · ${voice.now.rig}` : ''}</div>
-                  <div style={{ fontSize: 13.5, lineHeight: 1.45, marginTop: 2, direction: /[\u0600-\u06FF]/.test(voice.now.text) ? 'rtl' : 'ltr' }}>{voice.now.text}</div>
-                  {voice.waiting > 0 && <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 3 }}>{voice.waiting} more waiting, one at a time</div>}
-                </div>
-                <div style={{ display: 'grid', gap: 5 }}>
-                  <button className="btn" style={{ minHeight: 28, fontSize: 11.5, padding: '0 9px' }} onClick={voice.skip}>Skip</button>
-                  {voice.waiting > 0 && <button className="btn" style={{ minHeight: 28, fontSize: 11.5, padding: '0 9px' }} onClick={voice.clear}>Stop all</button>}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  <Stat label="To do" value={String(todo.length)} tone={todo.some(a => a.level === 'act') ? 'var(--red)' : todo.length ? 'var(--amber)' : 'var(--green)'} />
+                  <Stat label="At stake" value={`SAR ${r0(atStake)}`} tone="var(--orange)" />
+                  <Stat label="Proven" value={`${totals.fixed} · ${r1(totals.hours)} h`} tone="var(--green)" />
                 </div>
               </section>
-            )}
-            {advice.filter(a => a.level !== 'info').length === 0 && <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, fontSize: 13.5, color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'center' }}><BadgeCheck size={16} color="var(--green)" /> Every rig is running well. Copilot is watching.</section>}
-            {advice.filter(a => a.level !== 'info').map(a => (
-              <AdviceCard key={a.key} a={a} lang={lang} level={level} open={open === a.key || (a === advice.find(x => x.level !== 'info') && !closed[a.key])}
-                onToggle={() => { const isOpen = open === a.key || (a === advice.find(x => x.level !== 'info') && !closed[a.key]); if (isOpen) { setClosed(c => ({ ...c, [a.key]: true })); if (open === a.key) setOpen(null) } else { setOpen(a.key); setClosed(c => ({ ...c, [a.key]: false })) } }}
-                record={mem.record[a.kind]} escalated={escalated(a)} selected={a.rig === sel} speaking={voice.now?.key === a.key} onPick={() => setSel(a.rig)}
-                onDone={() => act(a, 'done')} onApply={() => act(a, 'applied')} onLater={() => act(a, 'later')} />
-            ))}
 
-            {advice.some(a => a.level === 'info') && (
-              <details style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 14px', fontSize: 13 }}>
-                <summary style={{ cursor: 'pointer', color: 'var(--muted)', fontWeight: 600 }}>Also noted ({advice.filter(a => a.level === 'info').length})</summary>
-                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                  {advice.filter(a => a.level === 'info').map(a => <div key={a.key} style={{ display: 'flex', gap: 8, alignItems: 'center' }}><b className="mono">{a.rig}</b><span style={{ color: 'var(--muted)', flex: 1 }}>{a.what}</span><button className="btn" style={{ minHeight: 28, fontSize: 11.5, padding: '0 9px' }} onClick={() => act(a, 'done')}><Check size={12} /> Done</button></div>)}
+              {voice.now && (
+                <section className="card rise" aria-live="polite" style={{ padding: '11px 13px', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'center', borderColor: 'var(--blue)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, fontWeight: 600, letterSpacing: '.06em', color: 'var(--blue)', textTransform: 'uppercase' }}><span className="talk" aria-hidden style={{ color: 'var(--blue)' }}><span /><span /><span /></span> Copilot is saying{voice.now.rig ? ` · ${voice.now.rig}` : ''}</div>
+                    <div style={{ fontSize: 14, lineHeight: 1.45, marginTop: 4, direction: /[؀-ۿ]/.test(voice.now.text) ? 'rtl' : 'ltr' }}>{voice.now.text}</div>
+                    {voice.waiting > 0 && <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 3 }}>{voice.waiting} more waiting, one at a time</div>}
+                  </div>
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <button className="btn btn-sm" onClick={voice.skip}>Skip</button>
+                    {voice.waiting > 0 && <button className="btn btn-sm" onClick={voice.clear}>Stop all</button>}
+                  </div>
+                </section>
+              )}
+
+              {focus ? (
+                <Focus a={focus} lang={lang} level={level} record={mem.record[focus.kind]} escalated={escalated(focus)} speaking={voice.now?.key === focus.key}
+                  onPick={() => setSel(focus.rig)} onDone={() => act(focus, 'done')} onApply={() => act(focus, 'applied')} onLater={() => act(focus, 'later')} />
+              ) : (
+                <section className="card" style={{ padding: 16, display: 'flex', gap: 10, alignItems: 'center' }}><BadgeCheck size={20} color="var(--green)" /><div><div style={{ fontWeight: 600 }}>Every rig is running well</div><div style={{ fontSize: 13, color: 'var(--muted)' }}>Copilot is watching every reading.</div></div></section>
+              )}
+
+              {rest.length > 0 && (
+                <section className="card" style={{ overflow: 'hidden' }}>
+                  <div style={{ padding: '11px 14px 8px' }} className="label">Next ({rest.length})</div>
+                  {rest.map(a => (
+                    <button key={a.key} onClick={() => { setFocusKey(a.key); setSel(a.rig) }} style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: 'transparent', border: 'none', borderTop: '1px solid var(--line)', color: 'var(--text)', padding: '10px 14px', minHeight: 48, display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr) 16px', gap: 10, alignItems: 'center' }}>
+                      <LevelTag level={a.level} />
+                      <span style={{ minWidth: 0 }}><span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)' }}>{a.rig}</span> <span style={{ fontSize: 13.5 }}>{a.what}</span></span>
+                      <ChevronRight size={15} color="var(--faint)" />
+                    </button>
+                  ))}
+                </section>
+              )}
+              {noted.length > 0 && (
+                <details className="card" style={{ padding: '10px 14px' }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--muted)', minHeight: 28, display: 'flex', alignItems: 'center', gap: 7 }}><Info size={14} /> Also noted ({noted.length})</summary>
+                  <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                    {noted.map(a => <div key={a.key} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}><b className="mono" style={{ fontSize: 12 }}>{a.rig}</b><span style={{ color: 'var(--muted)', flex: 1 }}>{a.what}</span><button className="btn btn-sm" onClick={() => act(a, 'done')}><Check size={13} /> Done</button></div>)}
+                  </div>
+                </details>
+              )}
+
+              <section className="card" style={{ overflow: 'hidden' }}>
+                <div className="tabs" role="tablist" style={{ padding: '0 8px' }}>
+                  <button role="tab" aria-selected={tab === 'ask'} onClick={() => setTab('ask')}><MessageSquare size={14} /> Ask</button>
+                  <button role="tab" aria-selected={tab === 'checked'} onClick={() => setTab('checked')}><BadgeCheck size={14} /> Checked {proven.length > 0 && <span className="mono" style={{ fontSize: 11 }}>{proven.length}</span>}</button>
+                  <button role="tab" aria-selected={tab === 'logs'} onClick={() => setTab('logs')}><ListChecks size={14} /> Shift logs</button>
                 </div>
-              </details>
-            )}
-
-            <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
-              <div className="eyebrow">Ask Copilot about {sel}</div>
-              <div style={{ display: 'grid', gap: 7, maxHeight: 200, overflowY: 'auto', marginTop: 8 }} ref={el => { if (el) el.scrollTop = el.scrollHeight }} aria-live="polite">
-                {chat.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--faint)' }}>Ask by voice or type. Or tell Copilot what happened and it goes in the shift log.</div>}
-                {chat.map((m, i) => <div key={i} style={{ justifySelf: m.who === 'you' ? 'end' : 'start', maxWidth: '92%', background: m.who === 'you' ? 'var(--raised2)' : 'rgba(249,115,22,.1)', border: `1px solid ${m.who === 'you' ? 'var(--line)' : 'rgba(249,115,22,.3)'}`, borderRadius: 11, padding: '7px 10px', fontSize: 13, lineHeight: 1.45, direction: /[؀-ۿ]/.test(m.text) ? 'rtl' : 'ltr' }}>{m.text}</div>)}
-              </div>
-              <div style={{ display: 'flex', gap: 6, marginTop: 9 }}>
-                <button className="btn" aria-pressed={listening} onPointerDown={() => listen(true)} onPointerUp={() => listen(false)} style={{ background: listening ? 'var(--red)' : 'var(--raised)', minWidth: 44 }} aria-label="Hold to speak">{listening ? <MicOff size={16} /> : <Mic size={16} />}</button>
-                <form onSubmit={e => { e.preventDefault(); ask(typed); setTyped('') }} style={{ flex: 1, display: 'flex', gap: 6 }}>
-                  <input value={typed} onChange={e => setTyped(e.target.value)} placeholder='e.g. "what should I do now?"' aria-label="Ask Copilot" style={{ flex: 1, minWidth: 0, minHeight: 40, background: 'var(--raised)', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: 10, padding: '0 10px', fontSize: 13 }} />
-                  <button className="btn" type="submit" aria-label="Send"><Send size={15} /></button>
-                </form>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                {['What should I do now?', 'Rock ahead?', 'Bit life?', 'Cost a metre?', 'We stopped 40 minutes for water', 'Log a bit change'].map(q => <button key={q} className="btn" style={{ minHeight: 30, fontSize: 11.5, padding: '0 9px', fontWeight: 500 }} onClick={() => ask(q)}>{q}</button>)}
-              </div>
-            </section>
-
-            {proven.length > 0 && (
-              <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
-                <div className="eyebrow">Checked by Copilot</div>
-                <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-                  {proven.slice(0, 6).map((p, i) => (
-                    <div key={i} className="slideIn" style={{ display: 'grid', gridTemplateColumns: '18px 1fr', gap: 8, fontSize: 12.5, lineHeight: 1.45 }}>
-                      {p.worked ? <BadgeCheck size={16} color="var(--green)" /> : <ShieldAlert size={16} color="var(--red)" />}
-                      <span><b className="mono" style={{ color: 'var(--text)' }}>{p.rig}</b> <span style={{ color: p.worked ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{p.worked ? 'worked' : 'not fixed'}</span>: <span style={{ color: 'var(--muted)' }}>{p.text}{p.hours ? ` · ${r1(p.hours)} h saved` : ''}{p.sar ? ` · SAR ${r0(p.sar)}` : ''}</span></span>
+                <div style={{ padding: 14 }} role="tabpanel">
+                  {tab === 'ask' && <>
+                    <div style={{ fontSize: 12.5, color: 'var(--faint)', marginBottom: 8 }}>About <b className="mono" style={{ color: 'var(--muted)' }}>{sel}</b>. Ask, or tell Copilot what happened and it goes in the shift log.</div>
+                    <div style={{ display: 'grid', gap: 7, maxHeight: 220, overflowY: 'auto' }} ref={el => { if (el) el.scrollTop = el.scrollHeight }}>
+                      {chat.map((m, i) => <div key={i} style={{ justifySelf: m.who === 'you' ? 'end' : 'start', maxWidth: '90%', background: m.who === 'you' ? 'var(--raised2)' : 'rgba(249,115,22,.1)', border: `1px solid ${m.who === 'you' ? 'var(--line)' : 'rgba(249,115,22,.3)'}`, borderRadius: 10, padding: '8px 11px', fontSize: 13.5, lineHeight: 1.45, direction: /[؀-ۿ]/.test(m.text) ? 'rtl' : 'ltr' }}>{m.text}</div>)}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: chat.length ? 10 : 0 }}>
+                      <button className="btn" aria-pressed={listening} onPointerDown={() => listen(true)} onPointerUp={() => listen(false)} style={{ minWidth: 48, minHeight: 48, background: listening ? 'var(--red)' : 'var(--card)', color: listening ? '#fff' : 'var(--text)' }} aria-label="Hold to speak">{listening ? <MicOff size={18} /> : <Mic size={18} />}</button>
+                      <form onSubmit={e => { e.preventDefault(); ask(typed); setTyped('') }} style={{ flex: 1, display: 'flex', gap: 6 }}>
+                        <label htmlFor="ask" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Ask Copilot</label>
+                        <input id="ask" value={typed} onChange={e => setTyped(e.target.value)} placeholder="What should I do now?" aria-label="Ask Copilot" style={{ flex: 1, minWidth: 0, minHeight: 48, background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--line3)', borderRadius: 8, padding: '0 12px', fontSize: 15 }} />
+                        <button className="btn btn-primary" type="submit" aria-label="Send" style={{ minWidth: 48, minHeight: 48 }}><Send size={17} /></button>
+                      </form>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                      {['What should I do now?', 'Rock ahead?', 'Bit life?', 'Cost a metre?', 'We stopped 40 minutes for water', 'Log a bit change'].map(q => <button key={q} className="btn btn-sm" style={{ fontWeight: 500 }} onClick={() => ask(q)}>{q}</button>)}
+                    </div>
+                  </>}
+                  {tab === 'checked' && (proven.length === 0 ? <div style={{ fontSize: 13, color: 'var(--faint)' }}>When the crew acts on advice, Copilot watches the readings and records here whether it worked.</div> : (
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      {proven.map((p, i) => (
+                        <div key={i} className="rise" style={{ display: 'grid', gridTemplateColumns: '20px 1fr', gap: 9, fontSize: 13, lineHeight: 1.45 }}>
+                          {p.worked ? <BadgeCheck size={18} color="var(--green)" /> : <ShieldAlert size={18} color="var(--red)" />}
+                          <span><b className="mono">{p.rig}</b> <b style={{ color: p.worked ? 'var(--green-t)' : 'var(--red-t)' }}>{p.worked ? 'Worked' : 'Not fixed'}</b> · {KIND_LABEL[p.kind]}<span style={{ display: 'block', color: 'var(--muted)' }}>{p.text}{p.hours ? ` · ${r1(p.hours)} h saved` : ''}{p.sar ? ` · SAR ${r0(p.sar)}` : ''}</span></span>
+                        </div>
+                      ))}
                     </div>
                   ))}
+                  {tab === 'logs' && (
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {lives.map(s => {
+                        const mine = logs.filter(l => l.rig === s.rig.rig)
+                        const down = mine.filter(l => l.kind === 'downtime').reduce((x, l) => x + (l.minutes ?? 0), 0) + Math.round(s.standbySecs / 60)
+                        return (
+                          <div key={s.rig.rig} className="raised" style={{ padding: '10px 12px', fontSize: 13 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <FileText size={15} color="var(--muted)" aria-hidden /><b className="mono">{s.rig.rig}</b>
+                              <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>{r1(s.depth - s.startDepth)} m · {r1(s.drillSecs / 3600)} h{down ? ` · ${down} min stopped` : ''}</span>
+                              <button className="btn btn-sm" style={{ marginLeft: 'auto' }} disabled={sent[s.rig.rig]} onClick={() => { setSent(x => ({ ...x, [s.rig.rig]: true })); say({ en: `${s.rig.rig} shift log sent to the supervisor.`, ar: `أُرسل سجل ${s.rig.rig} إلى المشرف.`, hi: `${s.rig.rig} की शिफ्ट लॉग सुपरवाइज़र को भेजी गई।`, ur: `${s.rig.rig} کی شفٹ لاگ سپروائزر کو بھیج دی گئی۔` }, 3) }}>{sent[s.rig.rig] ? <><Check size={13} /> Sent</> : 'Send'}</button>
+                            </div>
+                            {mine.length === 0 ? <div style={{ color: 'var(--faint)', marginTop: 5, fontSize: 12.5 }}>Metres and hours from the sensors so far.</div> : mine.slice(-4).map((l, i) => <div key={i} style={{ color: 'var(--muted)', marginTop: 5, fontSize: 12.5 }}><span className="mono" style={{ color: 'var(--faint)' }}>{clock(l.at, false)}</span> · {l.text}</div>)}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </section>
-            )}
-
-            <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
-              <div className="eyebrow">Shift logs, writing themselves</div>
-              <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-                {lives.map(s => {
-                  const mine = logs.filter(l => l.rig === s.rig.rig)
-                  const down = mine.filter(l => l.kind === 'downtime').reduce((x, l) => x + (l.minutes ?? 0), 0) + Math.round(s.standbySecs / 60)
-                  return (
-                    <div key={s.rig.rig} style={{ background: 'var(--raised)', borderRadius: 11, padding: '9px 11px', fontSize: 12.5 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <FileText size={14} color="var(--muted)" /><b className="mono">{s.rig.rig}</b>
-                        <span style={{ color: 'var(--muted)' }}>{r1(s.depth - s.startDepth)} m · {r1(s.drillSecs / 3600)} h drilling{down ? ` · ${down} min stopped` : ''}</span>
-                        <button className="btn" style={{ marginLeft: 'auto', minHeight: 28, fontSize: 11.5, padding: '0 9px' }} disabled={sent[s.rig.rig]} onClick={() => { setSent(x => ({ ...x, [s.rig.rig]: true })); say({ en: `${s.rig.rig} shift log sent to the supervisor.`, ar: `أُرسل سجل ${s.rig.rig} إلى المشرف.`, hi: `${s.rig.rig} की शिफ्ट लॉग सुपरवाइज़र को भेजी गई।`, ur: `${s.rig.rig} کی شفٹ لاگ سپروائزر کو بھیج دی گئی۔` }, 3) }}>{sent[s.rig.rig] ? <><Check size={13} /> Sent</> : 'Send'}</button>
-                      </div>
-                      {mine.slice(-3).map((l, i) => <div key={i} style={{ color: 'var(--muted)', marginTop: 4 }}><span className="mono" style={{ color: 'var(--faint)' }}>{clock(l.at, false)}</span> · {l.text}</div>)}
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-            <button className="btn" style={{ justifySelf: 'start', color: 'var(--faint)' }} onClick={() => { setOn(false); setBooting(0) }}><Power size={14} /> Remove Copilot</button>
-          </>}
-        </aside>
+              <button className="btn" style={{ justifySelf: 'start', color: 'var(--muted)' }} onClick={() => { setOn(false); setBooting(0); voice.clear() }}><Power size={15} /> Remove Copilot</button>
+            </>}
+          </aside>
+        </div>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--faint)', lineHeight: 1.55 }}>Sensor readings are simulated: no rig is fitted yet. The rigs, holes, rock (from real core photos), speeds, best crews, bits, contract rates and costs are XPLORIX&rsquo;s real record. Copilot runs on rules today; the launch version adds trained models behind the same agent.</p>
       </div>
     </div>
   )
 }
 
-function Mini({ label, v, note, tone }: { label: string; v: string; note?: string; tone?: string }) {
+function Kpi({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: string }) {
   return (
-    <div style={{ background: 'var(--raised)', borderRadius: 12, padding: '9px 11px', borderLeft: `3px solid ${tone ?? 'var(--line2)'}` }}>
-      <div className="eyebrow">{label}</div>
-      <div className="mono" style={{ fontSize: 17, fontWeight: 700, marginTop: 3 }}>{v}</div>
-      {note && <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>{note}</div>}
+    <div className="raised" style={{ padding: '10px 12px', borderLeft: `3px solid ${tone ?? 'var(--line3)'}` }}>
+      <div className="label">{label}</div>
+      <div className="mono" style={{ fontSize: 19, fontWeight: 700, marginTop: 4 }}>{value}</div>
+      {note && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>{note}</div>}
     </div>
   )
 }
-function Kpi({ label, v, c }: { label: string; v: string; c: string }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div style={{ background: 'rgba(11,14,19,.55)', borderRadius: 10, padding: '7px 9px', borderTop: `2px solid ${c}` }}>
-      <div style={{ fontSize: 10.5, color: 'var(--faint)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' }}>{label}</div>
-      <div className="mono" style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>{v}</div>
+    <div className="raised" style={{ padding: '8px 10px', borderTop: `2px solid ${tone}` }}>
+      <div className="label" style={{ fontSize: 10.5 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 14.5, fontWeight: 700, marginTop: 3 }}>{value}</div>
     </div>
   )
+}
+function LevelTag({ level }: { level: Advice['level'] }) {
+  const m = { act: { c: 'var(--red-t)', b: 'var(--red)', w: 'Act now', I: AlertTriangle }, watch: { c: 'var(--amber)', b: 'var(--amber)', w: 'Watch', I: Eye }, info: { c: 'var(--blue)', b: 'var(--blue)', w: 'Info', I: Info } }[level]
+  return <span className="chip" style={{ color: m.c, borderColor: m.b, fontSize: 11.5, justifySelf: 'start' }}><m.I size={12} aria-hidden /> {m.w}</span>
 }
 
-function AdviceCard({ a, lang, level, open, onToggle, record, escalated, selected, speaking, onPick, onDone, onApply, onLater }: {
-  a: Advice; lang: Lang; level: CLevel; open: boolean; onToggle: () => void; record?: { worked: number; of: number }; escalated: boolean; selected: boolean; speaking: boolean
+/* The one thing to do now, big enough to read and tap at the rig. */
+function Focus({ a, lang, level, record, escalated, speaking, onPick, onDone, onApply, onLater }: {
+  a: Advice; lang: Lang; level: CLevel; record?: { worked: number; of: number }; escalated: boolean; speaking: boolean
   onPick: () => void; onDone: () => void; onApply: () => void; onLater: () => void
 }) {
-  const c = LEVEL_C[a.level]
   const canApply = a.fix.type !== 'none'
+  const primaryApply = level !== 'advise' && canApply
   return (
-    <section className="slideIn" style={{ background: 'var(--panel)', border: `1px solid ${speaking ? 'var(--blue)' : a.level === 'act' ? 'rgba(239,68,68,.55)' : a.level === 'watch' ? 'rgba(245,158,11,.45)' : 'var(--line)'}`, borderRadius: 14, overflow: 'hidden', boxShadow: [selected ? `inset 3px 0 0 ${c}` : '', speaking ? '0 0 0 2px rgba(59,130,246,.35)' : ''].filter(Boolean).join(', ') || undefined }}>
-      <button onClick={onToggle} aria-expanded={open} style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '11px 13px', display: 'grid', gap: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.1em', color: c }}>{a.level === 'act' ? 'ACT NOW' : a.level === 'watch' ? 'WATCH' : 'INFO'}</span>
-          <span onClick={e => { e.stopPropagation(); onPick() }} className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', textDecoration: 'underline', textDecorationColor: 'var(--line2)', textUnderlineOffset: 3 }}>{a.rig}</span>
-          <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>{KIND_LABEL[a.kind]}</span>
-          {speaking && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Volume2 size={12} /> speaking</span>}
-          {escalated && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><ShieldAlert size={12} /> sent to supervisor</span>}
-          <span style={{ marginLeft: 'auto', color: 'var(--faint)' }}>{open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
-        </div>
-        <div style={{ fontSize: 14.5, fontWeight: 700, lineHeight: 1.35 }}>{a.what}</div>
-        {lang !== 'en' && <div style={{ fontSize: 13, color: 'var(--muted)', direction: lang === 'hi' ? 'ltr' : 'rtl', lineHeight: 1.5 }}>{a.say[lang]}</div>}
-      </button>
-      {open && (
-        <div style={{ padding: '0 13px 13px', display: 'grid', gap: 10 }}>
-          <div>
-            <div className="eyebrow" style={{ color: 'var(--orange)' }}>How</div>
-            <ol style={{ margin: '5px 0 0', paddingLeft: 20, display: 'grid', gap: 3, fontSize: 13, lineHeight: 1.45 }}>{a.how.map((h, i) => <li key={i}>{h}</li>)}</ol>
-          </div>
-          <div>
-            <div className="eyebrow">Why</div>
-            <ul style={{ margin: '5px 0 0', paddingLeft: 18, display: 'grid', gap: 3, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.45 }}>{a.why.map((h, i) => <li key={i}>{h}</li>)}</ul>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
-            {record && record.of > 0 && <span style={{ border: '1px solid var(--line2)', borderRadius: 999, padding: '2px 9px', color: 'var(--muted)' }}>Worked {record.worked} of {record.of} times</span>}
-            {a.gain && <span style={{ border: '1px solid rgba(34,197,94,.4)', borderRadius: 999, padding: '2px 9px', color: 'var(--green)' }}>{a.gain}</span>}
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {level !== 'advise' && canApply && <button className="btn" style={{ background: 'var(--orange)', borderColor: 'var(--orange)', color: '#fff' }} onClick={onApply}><Wrench size={14} /> {a.fix.type === 'log-standby' ? 'Log it' : 'Apply to rig'}</button>}
-            <button className="btn" style={{ background: level === 'advise' || !canApply ? 'var(--green)' : 'var(--raised)', borderColor: level === 'advise' || !canApply ? 'var(--green)' : 'var(--line)', color: level === 'advise' || !canApply ? '#06210F' : 'var(--text)' }} onClick={onDone}><Check size={14} /> Done</button>
-            <button className="btn" onClick={onLater}>Not now</button>
-          </div>
-        </div>
-      )}
+    <section className="card rise" aria-label="Do this now" style={{ padding: 16, display: 'grid', gap: 14, borderColor: speaking ? 'var(--blue)' : a.level === 'act' ? 'var(--red)' : 'var(--amber)', boxShadow: speaking ? '0 0 0 2px rgba(91,141,239,.35)' : 'var(--shadow)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <LevelTag level={a.level} />
+        <button onClick={onPick} className="mono" style={{ background: 'none', border: 'none', color: 'var(--text)', fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: '6px 2px', textDecoration: 'underline', textDecorationColor: 'var(--line3)', textUnderlineOffset: 3 }}>{a.rig}</button>
+        <span style={{ fontSize: 12.5, color: 'var(--faint)' }}>{KIND_LABEL[a.kind]}</span>
+        {speaking && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', gap: 5 }}><Volume2 size={13} /> Speaking</span>}
+      </div>
+      {escalated && <div role="alert" style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, fontWeight: 600, color: 'var(--red-t)', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.4)', borderRadius: 8, padding: '8px 10px' }}><ShieldAlert size={15} /> No answer for a minute: sent to the supervisor</div>}
+      <div>
+        <div style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.3 }}>{a.what}</div>
+        {lang !== 'en' && <div style={{ fontSize: 15, color: 'var(--muted)', lineHeight: 1.55, marginTop: 6, direction: lang === 'hi' ? 'ltr' : 'rtl' }}>{a.say[lang]}</div>}
+      </div>
+      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
+        {a.how.map((h, i) => (
+          <li key={i} style={{ display: 'grid', gridTemplateColumns: '26px 1fr', gap: 10, alignItems: 'start', fontSize: 15, lineHeight: 1.45 }}>
+            <span className="mono" style={{ width: 26, height: 26, borderRadius: 13, background: 'var(--raised2)', border: '1px solid var(--line3)', display: 'grid', placeItems: 'center', fontSize: 12.5, fontWeight: 700 }}>{i + 1}</span>
+            <span>{h}</span>
+          </li>
+        ))}
+      </ol>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {primaryApply && <button className="btn btn-primary btn-lg" onClick={onApply}><Wrench size={17} /> {a.fix.type === 'log-standby' ? 'Log it' : a.fix.type === 'flush' ? 'Run the flush' : a.fix.type === 'engine-off' ? 'Switch engine off' : 'Apply to rig'}</button>}
+        <button className={`btn btn-lg ${primaryApply ? '' : 'btn-good'}`} onClick={onDone}><Check size={17} /> Done</button>
+        <button className="btn btn-lg" onClick={onLater} style={{ color: 'var(--muted)' }}>Not now</button>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {record && record.of > 0 && <span className="chip">Worked {record.worked} of {record.of} times</span>}
+        {a.gain && <span className="chip" style={{ color: 'var(--green-t)', borderColor: 'rgba(34,160,107,.5)' }}>{a.gain}</span>}
+      </div>
+      <details>
+        <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--muted)', minHeight: 32, display: 'flex', alignItems: 'center' }}>Why Copilot says this</summary>
+        <ul style={{ margin: '6px 0 0', paddingLeft: 18, display: 'grid', gap: 4, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>{a.why.map((w, i) => <li key={i}>{w}</li>)}</ul>
+      </details>
     </section>
   )
 }
 
 function AddCopilot({ onAdd }: { onAdd: () => void }) {
-  const items = [
-    ['Reads every reading, every second', 'Rotation, bit load, torque, water, penetration, engine and fuel, on every rig'],
-    ['Sees the rock ahead', 'From the cored holes around each rig, before the bit gets there'],
-    ['Says what to do and how', 'Step by step, with the readings behind it and how often it worked'],
-    ['Guards the money', 'Billable standby, cost a metre against the contract, diesel burned for nothing'],
-    ['Catches failures early', 'A blocking bit, an engine losing cooling, a pump wearing out'],
-    ['Tells you when to stop a hole', 'When no target is left below: metres and money not spent'],
-    ['Checks its own advice', 'Watches the readings after you act and says whether it worked'],
+  const items: [React.ElementType, string, string][] = [
+    [Gauge, 'Reads every rig, every second', 'All eight readings on all six rigs'],
+    [AlertTriangle, 'Warns before it happens', 'Broken rock ahead, a blocking bit, an engine losing its cooling'],
+    [ListChecks, 'Says what to do and how', 'Step by step, with the readings behind it'],
+    [Sparkles, 'Guards the money', 'Billable standby, cost a metre against the contract, diesel'],
+    [BadgeCheck, 'Checks its own advice', 'Watches the readings after you act'],
   ]
   return (
-    <section style={{ background: 'linear-gradient(165deg, rgba(249,115,22,.18), rgba(139,92,246,.1) 55%, var(--panel))', border: '1px solid rgba(249,115,22,.5)', borderRadius: 16, padding: 18, display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-        <span className="ping" style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--orange)', display: 'grid', placeItems: 'center' }}><Sparkles size={20} color="#fff" /></span>
-        <div><div style={{ fontWeight: 800, fontSize: 17 }}>XPLORIX Copilot</div><div style={{ fontSize: 12.5, color: 'var(--muted)' }}>An AI agent for your rigs</div></div>
+    <section className="card" style={{ padding: 18, display: 'grid', gap: 14, borderColor: 'rgba(249,115,22,.5)' }}>
+      <div style={{ display: 'flex', gap: 11, alignItems: 'center' }}>
+        <span style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--orange)', color: 'var(--on-orange)', display: 'grid', placeItems: 'center' }}><Sparkles size={20} /></span>
+        <div><div style={{ fontWeight: 700, fontSize: 17 }}>XPLORIX Copilot</div><div style={{ fontSize: 13, color: 'var(--muted)' }}>An AI agent for your rigs</div></div>
       </div>
-      <div style={{ fontSize: 14, lineHeight: 1.55 }}>Add Copilot to Pulse and it reads every rig, every second, and tells your crew what to do and exactly how.</div>
-      <div style={{ display: 'grid', gap: 8 }}>
-        {items.map(([t, d]) => (
-          <div key={t} style={{ display: 'grid', gridTemplateColumns: '16px 1fr', gap: 8, fontSize: 12.5, lineHeight: 1.4 }}>
-            <Check size={15} color="var(--orange)" style={{ marginTop: 1 }} /><span><b>{t}</b><span style={{ display: 'block', color: 'var(--muted)' }}>{d}</span></span>
+      <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.55 }}>Add Copilot to Pulse. It reads every rig, every second, and tells your crew what to do and exactly how.</p>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {items.map(([I, t, d]) => (
+          <div key={t} style={{ display: 'grid', gridTemplateColumns: '30px 1fr', gap: 10, alignItems: 'start' }}>
+            <span style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--raised2)', display: 'grid', placeItems: 'center' }}><I size={15} color="var(--orange)" aria-hidden /></span>
+            <span style={{ fontSize: 13.5, lineHeight: 1.4 }}><b style={{ fontWeight: 600 }}>{t}</b><span style={{ display: 'block', color: 'var(--muted)', fontSize: 12.5 }}>{d}</span></span>
           </div>
         ))}
       </div>
-      <button className="btn" onClick={onAdd} style={{ minHeight: 50, fontSize: 15, background: 'var(--orange)', borderColor: 'var(--orange)', color: '#fff' }}><Sparkles size={17} /> Add XPLORIX Copilot</button>
-      <div style={{ fontSize: 11.5, color: 'var(--faint)', lineHeight: 1.5 }}>Works on any rig. Speaks English, Arabic, Hindi and Urdu. Copilot only changes the rig when you set it to Assist or Auto.</div>
+      <button className="btn btn-primary btn-lg" onClick={onAdd}><Sparkles size={18} /> Add XPLORIX Copilot</button>
+      <div style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.5 }}>Works on any rig. Speaks English, Arabic, Hindi and Urdu. Changes the rig only at Assist or Auto.</div>
     </section>
   )
 }
 
 function Booting({ step }: { step: number }) {
-  const lines = ['Connecting to the rig sensors', 'Reading the cored holes around each rig', 'Loading each rig\'s normal speed, bit and contract', 'Watching']
+  const lines = ['Connecting to the rig sensors', 'Reading the cored holes around each rig', 'Loading each rig\'s speed, bit and contract', 'Watching']
   return (
-    <section style={{ background: 'var(--panel)', border: '1px solid rgba(249,115,22,.45)', borderRadius: 16, padding: 18, display: 'grid', gap: 10 }}>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontWeight: 800 }}><Sparkles size={18} color="var(--orange)" /> Adding XPLORIX Copilot</div>
-      {lines.map((l, i) => <div key={l} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: i < step ? 'var(--text)' : 'var(--faint)' }}>{i < step ? <Check size={14} color="var(--green)" /> : <Clock size={14} />} {l}</div>)}
+    <section className="card" role="status" style={{ padding: 18, display: 'grid', gap: 10, borderColor: 'rgba(249,115,22,.45)' }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontWeight: 700 }}><Sparkles size={18} color="var(--orange)" /> Adding XPLORIX Copilot</div>
+      {lines.map((l, i) => <div key={l} style={{ display: 'flex', gap: 9, alignItems: 'center', fontSize: 13.5, color: i < step ? 'var(--text)' : 'var(--faint)' }}>{i < step ? <Check size={15} color="var(--green)" /> : <Clock size={15} />} {l}</div>)}
     </section>
   )
 }
