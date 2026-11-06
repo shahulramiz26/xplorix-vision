@@ -9,6 +9,7 @@ import { memory, useMemory } from '../../lib/memory'
 import { ratePerMetre } from '../../lib/data'
 import { nextBroken } from '../../lib/ground'
 import { Gauges, Trends, HoleStrip, KIND_LABEL } from '../../components/rigview'
+import { useVoice, type VoiceMode } from '../../lib/voice'
 
 /* ==========================================================================
  * XPLORIX PULSE, WITH XPLORIX COPILOT
@@ -51,7 +52,7 @@ export default function PulsePage() {
   const [booting, setBooting] = useState(0)
   const [level, setLevel] = useState<CLevel>('advise')
   const [lang, setLang] = useState<Lang>('en')
-  const [voice, setVoice] = useState(true)
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>('urgent')
   const [taken, setTaken] = useState<Record<string, Taken>>({})
   const [proven, setProven] = useState<Proven[]>([])
   const [seenAt, setSeenAt] = useState<Record<string, number>>({})
@@ -68,7 +69,8 @@ export default function PulsePage() {
   const spoken = useRef<Set<string>>(new Set())
   const mem = useMemory()
 
-  useEffect(() => { setOn(readStored('xplorix-copilot-on', false)); setLevel(readStored('xplorix-copilot-level', 'advise')); setLang(readStored('xplorix-copilot-lang', 'en')) }, [])
+  useEffect(() => { setOn(readStored('xplorix-copilot-on', false)); setLevel(readStored('xplorix-copilot-level', 'advise')); setLang(readStored('xplorix-copilot-lang', 'en')); setVoiceMode(readStored('xplorix-copilot-voice', 'urgent')) }, [])
+  useEffect(() => { writeStored('xplorix-copilot-voice', voiceMode) }, [voiceMode])
   useEffect(() => { writeStored('xplorix-copilot-on', on) }, [on])
   useEffect(() => { writeStored('xplorix-copilot-level', level) }, [level])
   useEffect(() => { writeStored('xplorix-copilot-lang', lang) }, [lang])
@@ -103,18 +105,10 @@ export default function PulsePage() {
   }, [on, booting])
   const ready = on && booting >= 4
 
-  const say = useCallback((t: Record<Lang, string> | string) => {
-    const text = typeof t === 'string' ? t : t[lang]
-    if (!voice || typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    try {
-      const u = new SpeechSynthesisUtterance(text)
-      const code = LANGS.find(l => l.v === lang)!.speech
-      u.lang = code; u.rate = 1.02
-      const v = window.speechSynthesis.getVoices().find(v => v.lang.replace('_', '-').startsWith(code.slice(0, 2)))
-      if (v) u.voice = v
-      window.speechSynthesis.speak(u)
-    } catch { /* no voice here */ }
-  }, [lang, voice])
+  const voice = useVoice(lang, voiceMode)
+  const say = useCallback((t: Record<Lang, string> | string, prio: 0 | 1 | 2 | 3 = 2, extra: { rig?: string; key?: string } = {}) => {
+    voice.say(typeof t === 'string' ? t : t[lang], prio, extra)
+  }, [voice, lang])
 
   // What Copilot sees right now, every rig
   const advice = useMemo(() => ready ? lives.flatMap(s => think(s)).filter(a => !taken[a.key]) : [], [lives, ready, taken])
@@ -127,7 +121,7 @@ export default function PulsePage() {
     const fresh = advice.filter(a => seenAt[a.key] == null)
     if (!fresh.length) return
     setSeenAt(m => ({ ...m, ...Object.fromEntries(fresh.map(a => [a.key, Date.now()])) }))
-    fresh.filter(a => a.level !== 'info').slice(0, 2).forEach(a => { if (!spoken.current.has(a.key)) { spoken.current.add(a.key); say(a.say) } })
+    fresh.filter(a => a.level !== 'info').forEach(a => { if (!spoken.current.has(a.key)) { spoken.current.add(a.key); say(a.say, a.level === 'act' ? 1 : 3, { rig: a.rig, key: a.key }) } })
     if (level === 'auto') fresh.filter(a => a.fix.type !== 'none').forEach(a => act(a, 'auto'))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advice.map(a => a.key).join('|'), ready, level])
@@ -153,7 +147,7 @@ export default function PulsePage() {
     if (a.kind === 'bit') later.current.push({ rig: a.rig, at: s.t + 15 * 60, run: x => ({ ...x, mode: 'tripping', modeLeft: 2 * 3600 }) })
     const what = f.type === 'settings' ? `${f.settings.rpm} rpm · ${f.settings.wob} kN · ${f.settings.flow} L/min` : f.type === 'flush' ? 'pulled back and flushed' : f.type === 'engine-off' ? 'engine off on standby' : f.type === 'log-standby' ? `client standby logged, SAR ${r0(a.money ?? 0)}` : a.how[0].toLowerCase()
     addLog(a.rig, s.depth, `${by}: ${what} (${KIND_LABEL[a.kind].toLowerCase()})`, f.type === 'log-standby' ? 'downtime' : 'copilot')
-    if (action === 'auto') say({ en: `Copilot: ${a.rig}, ${what}.`, ar: `كوبايلت: ${a.rig}، تم.`, hi: `कोपायलट: ${a.rig}, कर दिया।`, ur: `کوپائلٹ: ${a.rig}، کر دیا۔` })
+    if (action === 'auto') say({ en: `${a.rig}: Copilot has done it. ${what}.`, ar: `${a.rig}: نفّذ كوبايلت ذلك.`, hi: `${a.rig}: कोपायलट ने कर दिया।`, ur: `${a.rig}: کوپائلٹ نے کر دیا۔` }, 2, { rig: a.rig })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lives, say])
 
@@ -169,7 +163,7 @@ export default function PulsePage() {
       setProven(ps => [p, ...ps].slice(0, 40))
       memory.learn({ at: Date.now(), rig: t.a.rig, kind: t.a.kind, what: t.a.what, action: t.action, worked: v.worked, text: v.text, hours: v.hours, sar: v.sar })
       if (t.a.kind === 'broken' || t.a.kind === 'core') later.current.push({ rig: t.a.rig, at: now.t + 1, run: x => { const nb = nextBroken(x.ahead, x.depth); return nb && nb.inMetres < 3 ? x : { ...x, settings: { ...NORMAL } } } })
-      say({ en: `${t.a.rig}: ${v.worked ? 'fixed' : 'not fixed yet'}. ${v.text}.`, ar: `${t.a.rig}: ${v.worked ? 'تم الإصلاح' : 'لم يُحل بعد'}.`, hi: `${t.a.rig}: ${v.worked ? 'ठीक हो गया' : 'अभी ठीक नहीं'}।`, ur: `${t.a.rig}: ${v.worked ? 'ٹھیک ہو گیا' : 'ابھی ٹھیک نہیں'}۔` })
+      say({ en: `${t.a.rig}: ${v.worked ? 'fixed' : 'not fixed yet'}.`, ar: `${t.a.rig}: ${v.worked ? 'تم الإصلاح' : 'لم يُحل بعد'}.`, hi: `${t.a.rig}: ${v.worked ? 'ठीक हो गया' : 'अभी ठीक नहीं'}।`, ur: `${t.a.rig}: ${v.worked ? 'ٹھیک ہو گیا' : 'ابھی ٹھیک نہیں'}۔` }, v.worked ? 2 : 1, { rig: t.a.rig })
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lives])
@@ -186,7 +180,7 @@ export default function PulsePage() {
     const ans = answer(text, live, top)
     setChat(c => [...c.slice(-10), { who: 'you', text }, { who: 'copilot', text: ans.text[lang] }])
     if (ans.log) addLog(sel, live.depth, ans.log.text, ans.log.kind, ans.log.minutes)
-    say(ans.text)
+    say(ans.text, 0, { rig: sel })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [advice, sel, live, lang, say])
   const recog = useRef<{ stop: () => void } | null>(null)
@@ -310,11 +304,13 @@ export default function PulsePage() {
                   <div style={{ fontWeight: 800, fontSize: 15 }}>XPLORIX Copilot</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>Reading <b className="mono" style={{ color: 'var(--text)' }}>{RIGS.length * 8}</b> values a second on {RIGS.length} rigs · <span className="mono">{r0(reads)}</span> read so far</div>
                 </div>
-                <button className="btn" style={{ minHeight: 34, padding: '0 9px' }} onClick={() => setVoice(v => !v)} aria-label={voice ? 'Mute Copilot' : 'Unmute Copilot'}>{voice ? <Volume2 size={15} /> : <VolumeX size={15} />}</button>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <div className="seg" role="group" aria-label="Copilot level">
                   {(['advise', 'assist', 'auto'] as CLevel[]).map(l => <button key={l} aria-pressed={level === l} onClick={() => setLevel(l)} title={{ advise: 'Copilot says, the crew does', assist: 'One tap applies it to the rig', auto: 'Copilot applies it within safe limits' }[l]}>{{ advise: 'Advise', assist: 'Assist', auto: 'Auto' }[l]}</button>)}
+                </div>
+                <div className="seg" role="group" aria-label="Voice">
+                  {(['off', 'urgent', 'all'] as VoiceMode[]).map(m => <button key={m} aria-pressed={voiceMode === m} onClick={() => setVoiceMode(m)} title={{ off: 'Copilot does not speak', urgent: 'Speaks only act-now advice and answers', all: 'Speaks everything, one at a time' }[m]}>{m === 'off' ? <VolumeX size={13} /> : <Volume2 size={13} />} {{ off: 'Off', urgent: 'Urgent', all: 'All' }[m]}</button>)}
                 </div>
                 <div className="seg" role="group" aria-label="Language">
                   {LANGS.map(l => <button key={l.v} aria-pressed={lang === l.v} onClick={() => setLang(l.v)}>{l.label}</button>)}
@@ -327,11 +323,25 @@ export default function PulsePage() {
               </div>
             </section>
 
+            {voice.now && (
+              <section className="slideIn" aria-live="polite" style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 10, alignItems: 'center', background: 'rgba(59,130,246,.12)', border: '1px solid rgba(59,130,246,.5)', borderRadius: 14, padding: '10px 12px' }}>
+                <span className="ping" style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--blue)', display: 'grid', placeItems: 'center' }}><Volume2 size={15} color="#fff" /></span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', color: 'var(--blue)' }}>COPILOT IS SAYING{voice.now.rig ? ` · ${voice.now.rig}` : ''}</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.45, marginTop: 2, direction: /[\u0600-\u06FF]/.test(voice.now.text) ? 'rtl' : 'ltr' }}>{voice.now.text}</div>
+                  {voice.waiting > 0 && <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 3 }}>{voice.waiting} more waiting, one at a time</div>}
+                </div>
+                <div style={{ display: 'grid', gap: 5 }}>
+                  <button className="btn" style={{ minHeight: 28, fontSize: 11.5, padding: '0 9px' }} onClick={voice.skip}>Skip</button>
+                  {voice.waiting > 0 && <button className="btn" style={{ minHeight: 28, fontSize: 11.5, padding: '0 9px' }} onClick={voice.clear}>Stop all</button>}
+                </div>
+              </section>
+            )}
             {advice.filter(a => a.level !== 'info').length === 0 && <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, fontSize: 13.5, color: 'var(--muted)', display: 'flex', gap: 8, alignItems: 'center' }}><BadgeCheck size={16} color="var(--green)" /> Every rig is running well. Copilot is watching.</section>}
             {advice.filter(a => a.level !== 'info').map(a => (
               <AdviceCard key={a.key} a={a} lang={lang} level={level} open={open === a.key || (a === advice.find(x => x.level !== 'info') && !closed[a.key])}
                 onToggle={() => { const isOpen = open === a.key || (a === advice.find(x => x.level !== 'info') && !closed[a.key]); if (isOpen) { setClosed(c => ({ ...c, [a.key]: true })); if (open === a.key) setOpen(null) } else { setOpen(a.key); setClosed(c => ({ ...c, [a.key]: false })) } }}
-                record={mem.record[a.kind]} escalated={escalated(a)} selected={a.rig === sel} onPick={() => setSel(a.rig)}
+                record={mem.record[a.kind]} escalated={escalated(a)} selected={a.rig === sel} speaking={voice.now?.key === a.key} onPick={() => setSel(a.rig)}
                 onDone={() => act(a, 'done')} onApply={() => act(a, 'applied')} onLater={() => act(a, 'later')} />
             ))}
 
@@ -387,7 +397,7 @@ export default function PulsePage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <FileText size={14} color="var(--muted)" /><b className="mono">{s.rig.rig}</b>
                         <span style={{ color: 'var(--muted)' }}>{r1(s.depth - s.startDepth)} m · {r1(s.drillSecs / 3600)} h drilling{down ? ` · ${down} min stopped` : ''}</span>
-                        <button className="btn" style={{ marginLeft: 'auto', minHeight: 28, fontSize: 11.5, padding: '0 9px' }} disabled={sent[s.rig.rig]} onClick={() => { setSent(x => ({ ...x, [s.rig.rig]: true })); say({ en: `${s.rig.rig} shift log sent to the supervisor.`, ar: `أُرسل سجل ${s.rig.rig} إلى المشرف.`, hi: `${s.rig.rig} की शिफ्ट लॉग सुपरवाइज़र को भेजी गई।`, ur: `${s.rig.rig} کی شفٹ لاگ سپروائزر کو بھیج دی گئی۔` }) }}>{sent[s.rig.rig] ? <><Check size={13} /> Sent</> : 'Send'}</button>
+                        <button className="btn" style={{ marginLeft: 'auto', minHeight: 28, fontSize: 11.5, padding: '0 9px' }} disabled={sent[s.rig.rig]} onClick={() => { setSent(x => ({ ...x, [s.rig.rig]: true })); say({ en: `${s.rig.rig} shift log sent to the supervisor.`, ar: `أُرسل سجل ${s.rig.rig} إلى المشرف.`, hi: `${s.rig.rig} की शिफ्ट लॉग सुपरवाइज़र को भेजी गई।`, ur: `${s.rig.rig} کی شفٹ لاگ سپروائزر کو بھیج دی گئی۔` }, 3) }}>{sent[s.rig.rig] ? <><Check size={13} /> Sent</> : 'Send'}</button>
                       </div>
                       {mine.slice(-3).map((l, i) => <div key={i} style={{ color: 'var(--muted)', marginTop: 4 }}><span className="mono" style={{ color: 'var(--faint)' }}>{clock(l.at, false)}</span> · {l.text}</div>)}
                     </div>
@@ -421,19 +431,20 @@ function Kpi({ label, v, c }: { label: string; v: string; c: string }) {
   )
 }
 
-function AdviceCard({ a, lang, level, open, onToggle, record, escalated, selected, onPick, onDone, onApply, onLater }: {
-  a: Advice; lang: Lang; level: CLevel; open: boolean; onToggle: () => void; record?: { worked: number; of: number }; escalated: boolean; selected: boolean
+function AdviceCard({ a, lang, level, open, onToggle, record, escalated, selected, speaking, onPick, onDone, onApply, onLater }: {
+  a: Advice; lang: Lang; level: CLevel; open: boolean; onToggle: () => void; record?: { worked: number; of: number }; escalated: boolean; selected: boolean; speaking: boolean
   onPick: () => void; onDone: () => void; onApply: () => void; onLater: () => void
 }) {
   const c = LEVEL_C[a.level]
   const canApply = a.fix.type !== 'none'
   return (
-    <section className="slideIn" style={{ background: 'var(--panel)', border: `1px solid ${a.level === 'act' ? 'rgba(239,68,68,.55)' : a.level === 'watch' ? 'rgba(245,158,11,.45)' : 'var(--line)'}`, borderRadius: 14, overflow: 'hidden', boxShadow: selected ? `inset 3px 0 0 ${c}` : undefined }}>
+    <section className="slideIn" style={{ background: 'var(--panel)', border: `1px solid ${speaking ? 'var(--blue)' : a.level === 'act' ? 'rgba(239,68,68,.55)' : a.level === 'watch' ? 'rgba(245,158,11,.45)' : 'var(--line)'}`, borderRadius: 14, overflow: 'hidden', boxShadow: [selected ? `inset 3px 0 0 ${c}` : '', speaking ? '0 0 0 2px rgba(59,130,246,.35)' : ''].filter(Boolean).join(', ') || undefined }}>
       <button onClick={onToggle} aria-expanded={open} style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '11px 13px', display: 'grid', gap: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.1em', color: c }}>{a.level === 'act' ? 'ACT NOW' : a.level === 'watch' ? 'WATCH' : 'INFO'}</span>
           <span onClick={e => { e.stopPropagation(); onPick() }} className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', textDecoration: 'underline', textDecorationColor: 'var(--line2)', textUnderlineOffset: 3 }}>{a.rig}</span>
           <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>{KIND_LABEL[a.kind]}</span>
+          {speaking && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Volume2 size={12} /> speaking</span>}
           {escalated && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><ShieldAlert size={12} /> sent to supervisor</span>}
           <span style={{ marginLeft: 'auto', color: 'var(--faint)' }}>{open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}</span>
         </div>

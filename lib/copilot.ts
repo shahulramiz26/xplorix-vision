@@ -93,7 +93,7 @@ export function think(s: Live): Advice[] {
     // Bit blocking: pressure up, flow down
     const dp = slope(s, 'pressure', 12), df = slope(s, 'flow', 12)
     if (s.blockage > 0.25 || (dp > 8 && df < -8)) out.push({
-      ...base, key: `${rig.rig}:blocking:${Math.floor(s.t / 3600)}`, kind: 'blocking', level: 'act',
+      ...base, key: `${rig.rig}:blocking`, kind: 'blocking', level: 'act',
       what: `Bit blocking at ${r1(s.depth)} m: water pressure up, return flow down`,
       how: ['Stop the feed', 'Pull back 0.5 m off the bottom', 'Flush 2 minutes at full water', `Restart at ${EASED.rpm} rpm with light bit load, then build up`],
       why: [`Pressure ${r1(now.pressure)} bar, up ${r1(Math.max(0, dp) * 0.25)} bar in 15 minutes`, `Flow ${r0(now.flow)} L/min, down from ${r0(NORMAL.flow)}`, `Speed down to ${now.rop.toFixed(2)} m/h; core jammed in the tube or cuttings packing the bit`],
