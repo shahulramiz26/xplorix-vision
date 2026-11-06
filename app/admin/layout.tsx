@@ -8,7 +8,7 @@ import {
   DollarSign, X, Boxes, FileText, Store, HardHat, Target, Bell, CornerDownLeft, Handshake,
   Activity, Wrench, GitCompare, ListChecks, ClipboardCheck, Banknote, Calculator, Flag, CalendarRange, ShieldAlert, Building2, Gauge, CalendarDays,
   Layers, Camera, Mountain, Box, Palette as PaletteIcon, Download, BookOpen, ScanSearch, Drill, PanelLeftClose, PanelLeftOpen, Radio,
-  FileCheck2, Gem, Grip, Database, Network, Sparkles, Compass, BrainCircuit,
+  FileCheck2, Gem, Grip, Database, Network, Sparkles, Compass, BrainCircuit, Rocket, Mic, Bot, FileStack, MonitorDot,
 } from 'lucide-react'
 import { CoreProvider, useCore } from '../../lib/core/store'
 import { GeoDataProvider } from '../../lib/core/geo-data'
@@ -68,6 +68,18 @@ const NAV: { title: string | null; items: NavItem[] }[] = [
   { title: 'Stores', items: [{ href: '/admin/inventory', label: 'Parts & inventory', icon: Boxes, badge: ['stock'] }] },
   { title: 'Finance & billing', items: [{ href: '/admin/finance', label: 'Finance & billing', icon: DollarSign, badge: ['finance', 'billing'], also: ['/admin/intelligence/money'] }] },
   { title: 'Tenders', items: [{ href: '/admin/tenders', label: 'Tenders', icon: Target, also: ['/admin/intelligence/pricing', '/admin/bid-intelligence'] }] },
+  {
+    title: 'Vision',
+    items: [
+      { href: '/admin/vision', label: 'Vision roadmap', icon: Rocket },
+      { href: '/admin/vision/copilot', label: 'Copilot cockpit', icon: Mic },
+      { href: '/admin/vision/command', label: 'Command centre', icon: MonitorDot },
+      { href: '/admin/vision/gps', label: 'Geology GPS', icon: Compass },
+      { href: '/admin/vision/brain', label: 'Fleet brain', icon: BrainCircuit },
+      { href: '/admin/vision/autonomy', label: 'Autonomy (L4)', icon: Bot },
+      { href: '/admin/vision/backoffice', label: 'Self-running office', icon: FileStack },
+    ],
+  },
   {
     title: 'Management',
     items: [

@@ -36,6 +36,7 @@ export interface Know {
   bit: (rig: string) => { used: number; life: number; name: string }
   drillers: string[]
   logs: ShiftLog[]
+  fleet: { rig: string; hole: string | null }[]       // every rig on the record, with its latest hole
 }
 
 const median = (v: number[]) => { if (!v.length) return 0; const s = [...v].sort((a, b) => a - b); return s[Math.floor(s.length / 2)] }
@@ -97,6 +98,9 @@ export function useKnow(project?: string): Know {
       return { used: used % life, life, name: bitPart?.name ?? 'Bit' }
     }
     const drillers = Array.from(new Set(logs.map(l => l.driller).filter(Boolean) as string[]))
-    return { ready: all.ready, projects, holes, cols, normal, bestCrew, byGround, bit, drillers, logs }
+    const latest = new Map<string, { rig: string; hole: string | null; at: string }>()
+    logs.forEach(l => { const at = `${l.date}${l.shift}`; const x = latest.get(l.rig); if (!x || at > x.at) latest.set(l.rig, { rig: l.rig, hole: l.holeNumber, at }) })
+    const fleet = Array.from(latest.values()).map(({ rig, hole }) => ({ rig, hole })).sort((a, b) => a.rig.localeCompare(b.rig))
+    return { ready: all.ready, projects, holes, cols, normal, bestCrew, byGround, bit, drillers, logs, fleet }
   }, [state, inv, all.ready, all.list, project])
 }

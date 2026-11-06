@@ -14,6 +14,11 @@
 import { useSyncExternalStore } from 'react'
 
 export type AlertKind = 'broken-ahead' | 'slow' | 'bit-life' | 'engine-hot' | 'blocking' | 'survey-due' | 'gps-stop' | 'idle' | 'stall'
+export const KIND_LABEL: Record<AlertKind, string> = {
+  'broken-ahead': 'Broken ground ahead', slow: 'Slower than normal', 'bit-life': 'Bit life', 'engine-hot': 'Engine hot',
+  blocking: 'Bit blocking', 'survey-due': 'Survey due', 'gps-stop': 'Geology GPS stop', idle: 'Engine idling', stall: 'Bit grabbing',
+}
+
 export type Action = 'done' | 'later' | 'applied' | 'auto' | 'none'
 export type Outcome = 'worked' | 'failed' | 'pending'
 
@@ -36,7 +41,7 @@ export interface LogDraft {
 }
 
 interface Data { v: 1; events: CopilotEvent[]; drafts: LogDraft[]; seeded: boolean }
-const KEY = 'xplorix-copilot-v1'
+const KEY = 'xplorix-copilot-v2'
 let data: Data = { v: 1, events: [], drafts: [], seeded: false }
 let loaded = false
 const subs = new Set<() => void>()

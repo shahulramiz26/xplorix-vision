@@ -55,3 +55,22 @@ To connect a database, set `DATABASE_URL` (see `.env.example`). With no database
 ## Tech
 
 Next.js 14 (App Router), TypeScript, Tailwind CSS, Recharts, Lucide icons, Postgres when a database is connected.
+
+## XPLORIX Vision
+
+This repo starts from the XPLORIX MVP and adds the vision as working screens, under **Vision** in the admin menu (`/admin/vision`):
+
+| Stage | Screen | Path |
+|---|---|---|
+| Today | Digital twin, Pulse, Intelligence, AI Scorecard | existing MVP screens |
+| Launch | Copilot cockpit: ground-ahead radar, best settings, countdowns, voice (EN/AR), shift log that writes itself | `/admin/vision/copilot` |
+| Launch | Command centre: advice given, followed, proven; crew scorecard | `/admin/vision/command` |
+| Year 2 | Geology GPS: stop the hole when the target is passed | `/admin/vision/gps` |
+| Year 2 | Fleet brain: best way to drill each ground; radar checked against core | `/admin/vision/brain` |
+| Year 2–3 | Autopilot levels 2 and 3 (switch in the cockpit) | `/admin/vision/copilot` |
+| Year 3+ | Level 4: one person, the whole fleet | `/admin/vision/autonomy` |
+| Year 3+ | Self-running back office | `/admin/vision/backoffice` |
+
+`/admin/vision/copilot?story=1` plays the 3-minute demo story.
+
+Rig readings are simulated (`lib/copilot/sim.ts`). The rock ahead, holes, speeds, crews, costs and parts come from the MVP record (`lib/copilot/context.ts`, `lib/copilot/ground.ts`). Copilot's advice is rule-based (`lib/copilot/brain.ts`); outcomes are kept in the browser with 30 days of demo history (`lib/copilot/store.ts`).

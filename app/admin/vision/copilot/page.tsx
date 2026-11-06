@@ -50,10 +50,10 @@ export default function CopilotCockpit() {
   const ahead = useMemo<AheadMetre[]>(() => hole ? groundAhead({ hole: hole.id, x: hole.x, z: hole.z }, k.cols, 0, Math.ceil(Math.max(hole.planned ?? 0, hole.drilled) + 40), 4) : [], [hole, k.cols])
   const level = useMemo(() => targetLevel(k.cols), [k.cols])
   const gps = useMemo(() => {
-    if (!hole) return null
+    if (!hole || !k.ready) return null
     const col = k.cols.find(c => c.hole === hole.id)
     return col ? gpsFor(col, k.cols, level, hole.planned) : null
-  }, [hole, k.cols, level])
+  }, [hole, k.cols, k.ready, level])
 
   const [lang, setLang] = useState<Lang>('en')
   const [voice, setVoice] = useState(true)
@@ -79,7 +79,7 @@ export default function CopilotCockpit() {
   const timers = useRef<Record<string, number>>({})
   const ids = useRef<Record<string, string>>({})
 
-  useEffect(() => { if (k.ready && k.drillers.length) copilot.seed(k.holes.filter(h => h.rig).map(h => ({ rig: h.rig!, hole: h.id })).filter((x, i, a) => a.findIndex(y => y.rig === x.rig) === i), k.drillers, TODAY) }, [k.ready, k.holes, k.drillers])
+  useEffect(() => { if (k.ready && k.drillers.length) copilot.seed(k.fleet, k.drillers, TODAY) }, [k.ready, k.fleet, k.drillers])
 
   // Start (or restart) the rig on the chosen hole
   const reset = useCallback((storyMode = false) => {
@@ -103,7 +103,14 @@ export default function CopilotCockpit() {
     spoken.current = new Set(); pending.current = null
     setSaid([{ who: 'copilot', text: lang === 'ar' ? `مرحباً. أنا كوبايلت. ${rig} على ${hole.id} عند ${r1(d)} متر.` : `Copilot is on. ${rig} on ${hole.id} at ${r1(d)} m. Ask me anything, or say "log a bit change".` }])
   }, [hole, rig, ahead, k, lang])
-  useEffect(() => { if (hole && !s) reset() }, [hole, s, reset])
+  useEffect(() => { if (k.ready && hole && !s) reset() }, [k.ready, hole, s, reset])
+  const playStory = useCallback(() => { reset(true); setLvl(1); setStory(1); setRunning(true); setSpeed(900) }, [reset])
+  const autoStory = useRef(false)
+  useEffect(() => {
+    if (autoStory.current || !s || !hole) return
+    autoStory.current = true
+    if (new URLSearchParams(window.location.search).get('story') === '1') playStory()
+  }, [s, hole, playStory])
 
   const ground = hole?.formation ?? 'Medium Formation'
   const ctx: Ctx | null = useMemo(() => s && hole ? {
@@ -312,7 +319,7 @@ export default function CopilotCockpit() {
           <select aria-label="Speed" value={speed} onChange={e => setSpeed(Number(e.target.value))} style={{ minHeight: 44, background: C.raised, color: C.text, border: `1px solid ${C.line}`, borderRadius: 10, padding: '0 8px', fontSize: 13 }}>
             {[1, 30, 120, 300, 900].map(v => <option key={v} value={v}>×{v}</option>)}
           </select>
-          <button className="cp-btn" style={{ background: C.orange, borderColor: C.orange }} onClick={() => { reset(true); setLvl(1); setStory(1); setRunning(true); setSpeed(900) }}><Clapperboard size={16} /> Play story</button>
+          <button className="cp-btn" style={{ background: C.orange, borderColor: C.orange }} onClick={playStory}><Clapperboard size={16} /> Play story</button>
           <button className="cp-btn" aria-label="Full screen" onClick={() => document.getElementById('copilot-cockpit')?.requestFullscreen?.()}><Maximize2 size={16} /></button>
         </div>
       </div>
@@ -372,8 +379,8 @@ export default function CopilotCockpit() {
             </div>
           ) : (
             <div style={{ borderRadius: 14, border: `1px solid ${C.line}`, background: C.panel, padding: 18, display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.1em', color: C.green }}>ALL GOOD</span>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{nb ? `Next: broken ground in ${r1(nb.inMetres)} m. I'll tell you when to ease off.` : 'Good rock ahead. Keep these settings.'}</div>
+              <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.1em', color: watch ? C.violet : C.green }}>{watch ? 'WATCHING' : 'ALL GOOD'}</span>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{watch ? `Through broken ground to ${r0(watch.base)} m on eased settings. Watching torque and core: ${r1(s.coreLoss - watch.coreLoss)} m at risk so far.` : nb && nb.inMetres > 0.2 ? `Next: broken ground in ${r1(nb.inMetres)} m. I'll tell you when to ease off.` : 'Good rock ahead. Keep these settings.'}</div>
               {result && <div style={{ fontSize: 14, color: result.good ? C.green : C.red, marginTop: 6 }}>{result.good ? '✓ ' : '✗ '}{result.text}</div>}
             </div>
           )}
