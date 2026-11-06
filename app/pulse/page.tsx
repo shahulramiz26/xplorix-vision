@@ -70,6 +70,9 @@ export default function PulsePage() {
   const livesRef = useRef<Live[]>(lives)
   const spoken = useRef<Set<string>>(new Set())
   const mem = useMemory()
+  const [demo, setDemo] = useState<{ step: number; auto: boolean } | null>(null)
+  const demoRef = useRef(false)
+  demoRef.current = !!demo
 
   useEffect(() => { setOn(readStored('xplorix-copilot-on', false)); setLevel(readStored('xplorix-copilot-level', 'advise')); setLang(readStored('xplorix-copilot-lang', 'en')); setVoiceMode(readStored('xplorix-copilot-voice', 'urgent')) }, [])
   useEffect(() => { writeStored('xplorix-copilot-voice', voiceMode) }, [voiceMode])
@@ -115,7 +118,7 @@ export default function PulsePage() {
   const say = useCallback((t: Record<Lang, string> | string, prio: 0 | 1 | 2 | 3 = 2, extra: { rig?: string; key?: string; force?: boolean } = {}) => {
     voice.say(typeof t === 'string' ? t : t[voice.speakIn], prio, extra)
   }, [voice])
-  const allowed = (prio: number) => voiceMode === 'all' || (voiceMode === 'urgent' && prio <= 1)
+  const allowed = (prio: number) => !demoRef.current && (voiceMode === 'all' || (voiceMode === 'urgent' && prio <= 1))
 
   // What Copilot sees right now, every rig
   const advice = useMemo(() => ready ? lives.flatMap(s => think(s)).filter(a => !taken[a.key]) : [], [lives, ready, taken])
@@ -144,7 +147,7 @@ export default function PulsePage() {
   // Act-now advice nobody answered for a minute: say it once more
   const reminded = useRef(new Set<string>())
   useEffect(() => {
-    if (!ready) return
+    if (!ready || demoRef.current) return
     advice.filter(a => a.level === 'act' && seenAt[a.key] != null && Date.now() - seenAt[a.key] > 60000 && !reminded.current.has(a.key)).slice(0, 1).forEach(a => {
       reminded.current.add(a.key)
       say({ en: `Still waiting. ${a.say.en}`, ar: `ما زلنا ننتظر. ${a.say.ar}`, hi: `अभी भी इंतज़ार है। ${a.say.hi}`, ur: `ابھی بھی انتظار ہے۔ ${a.say.ur}` }, 1, { rig: a.rig, key: a.key })
@@ -189,7 +192,7 @@ export default function PulsePage() {
       setProven(ps => [p, ...ps].slice(0, 40))
       memory.learn({ at: Date.now(), rig: t.a.rig, kind: t.a.kind, what: t.a.what, action: t.action, worked: v.worked, text: v.text, hours: v.hours, sar: v.sar })
       if (t.a.kind === 'broken' || t.a.kind === 'core') later.current.push({ rig: t.a.rig, at: now.t + 1, run: x => { const nb = nextBroken(x.ahead, x.depth); return nb && nb.inMetres < 3 ? x : { ...x, settings: { ...NORMAL } } } })
-      say({ en: `${t.a.rig}: ${v.worked ? 'fixed' : 'not fixed yet'}.`, ar: `${t.a.rig}: ${v.worked ? 'تم الإصلاح' : 'لم يُحل بعد'}.`, hi: `${t.a.rig}: ${v.worked ? 'ठीक हो गया' : 'अभी ठीक नहीं'}।`, ur: `${t.a.rig}: ${v.worked ? 'ٹھیک ہو گیا' : 'ابھی ٹھیک نہیں'}۔` }, v.worked ? 2 : 1, { rig: t.a.rig })
+      say({ en: `${t.a.rig}: ${v.worked ? 'fixed' : 'not fixed yet'}.`, ar: `${t.a.rig}: ${v.worked ? 'تم الإصلاح' : 'لم يُحل بعد'}.`, hi: `${t.a.rig}: ${v.worked ? 'ठीक हो गया' : 'अभी ठीक नहीं'}।`, ur: `${t.a.rig}: ${v.worked ? 'ٹھیک ہو گیا' : 'ابھی ٹھیک نہیں'}۔` }, v.worked ? 2 : 1, { rig: t.a.rig, force: demoRef.current })
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lives])
@@ -229,6 +232,55 @@ export default function PulsePage() {
   }), [proven, taken])
   const atStake = advice.reduce((s, a) => s + (a.money ?? 0), 0)
   const byRig = (rig: string) => advice.filter(a => a.rig === rig)
+
+  /* INVESTOR DEMO: the best moments, one after another, short spoken lines,
+     the presenter sets the pace. Each scene finds the live advice, speaks one
+     short line, acts on it, and moves on when the voice is done. */
+  const scene = demo ? SCENES[demo.step] : null
+  const played = useRef(-1)
+  const sceneTimer = useRef<number[]>([])
+  const clearScene = () => { sceneTimer.current.forEach(id => window.clearTimeout(id)); sceneTimer.current = [] }
+  const goScene = (step: number) => { clearScene(); played.current = -1; voice.clear(); if (step >= SCENES.length) { quiet(); setDemo(null); setSpeed(30); return } setDemo(d => d ? { ...d, step } : d) }
+  const startDemo = () => {
+    clearScene(); played.current = -1; voice.clear()
+    setOn(true); setBooting(4); setRunning(true); setSpeed(120); setLevel('assist'); setTab('ask'); setFocusKey(null)
+    setDemo({ step: 0, auto: true })
+  }
+  // After the demo, what is already on screen is not read out again
+  const quiet = () => advice.forEach(a => { spoken.current.add(a.key); reminded.current.add(a.key) })
+  const stopDemo = () => { clearScene(); voice.clear(); quiet(); setDemo(null); setSpeed(30) }
+  useEffect(() => {
+    if (!demo || !ready || !scene || played.current === demo.step) return
+    const step = demo.step
+    const later = (ms: number, f: () => void) => sceneTimer.current.push(window.setTimeout(f, ms))
+    const next = () => { if (demoAutoRef.current) goScene(step + 1) }
+    if (scene.kind === 'intro' || scene.kind === 'proof') {
+      played.current = step
+      if (scene.kind === 'proof') setTab('checked')
+      say(scene.line ?? '', 0, { force: true })
+      later(scene.kind === 'intro' ? 5500 : 7000, next)
+      return
+    }
+    if (scene.kind === 'ask') {
+      played.current = step
+      setSel(scene.rig); setTab('ask')
+      later(400, () => ask(scene.ask ?? 'What should I do now?'))
+      later(9000, next)
+      return
+    }
+    const a = advice.find(x => x.rig === scene.rig && x.kind === scene.kind) ?? advice.find(x => x.kind === scene.kind)
+    if (!a) { if (played.current !== -2 - step) { played.current = -2 - step; later(12000, () => { if (played.current === -2 - step) goScene(step + 1) }) } return }   // not showing yet: wait a little, then skip
+    clearScene(); played.current = step
+    setSel(a.rig); setFocusKey(a.key)
+    const spoken = voice.speakIn === 'en' ? `${a.rig}. ${a.what}.` : a.say[voice.speakIn]
+    say(spoken, 0, { rig: a.rig, key: a.key, force: true })
+    later(3800, () => act(a, a.fix.type !== 'none' && a.fix.type !== 'log-standby' ? 'applied' : a.fix.type === 'log-standby' ? 'applied' : 'done'))
+    later(7000, next)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo?.step, ready, advice.map(a => a.key).join('|')])
+  const demoAutoRef = useRef(true)
+  demoAutoRef.current = demo?.auto ?? true
+  useEffect(() => () => clearScene(), [])
 
   const todo = advice.filter(a => a.level !== 'info')
   const noted = advice.filter(a => a.level === 'info')
@@ -278,6 +330,7 @@ export default function PulsePage() {
                 {[1, 30, 120, 300, 600].map(v => <option key={v} value={v}>{v === 1 ? 'Real time' : `×${v}`}</option>)}
               </select>
             </label>
+            {!demo && <button className="btn" onClick={startDemo} style={{ borderColor: 'var(--blue)', color: 'var(--text)' }}><Play size={15} color="var(--blue)" /> Investor demo</button>}
             {on
               ? <button className="btn" onClick={() => { setOn(false); setBooting(0); voice.clear() }} aria-pressed="true" style={{ borderColor: 'var(--orange)' }}><Sparkles size={16} color="var(--orange)" /> Copilot on <Power size={14} color="var(--faint)" /></button>
               : <button className="btn btn-primary" onClick={() => { setOn(true); setBooting(0) }}><Sparkles size={16} /> Add XPLORIX Copilot</button>}
@@ -316,7 +369,7 @@ export default function PulsePage() {
           })}
         </section>
 
-        <div className={`work ${on ? '' : 'off'}`}>
+        <div className={`work ${on ? '' : 'off'} ${demo ? 'demo' : ''}`}>
           {/* THE CHOSEN RIG */}
           <main style={{ display: 'grid', gap: 16, minWidth: 0 }}>
             <section className="card" style={{ padding: 16 }}>
@@ -485,6 +538,21 @@ export default function PulsePage() {
             </>}
           </aside>
         </div>
+        {demo && scene && (
+          <div role="region" aria-label="Investor demo" className="card rise" style={{ position: 'sticky', bottom: 12, zIndex: 20, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', padding: '12px 14px', borderColor: 'var(--blue)', boxShadow: '0 8px 30px rgba(0,0,0,.35)' }}>
+            <span className="chip" style={{ color: 'var(--blue)', borderColor: 'var(--blue)' }}><Play size={12} /> Demo {demo.step + 1} of {SCENES.length}</span>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{scene.title}</div>
+              <div style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 2 }}>{scene.note}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn" disabled={demo.step === 0} onClick={() => goScene(demo.step - 1)} aria-label="Previous">Back</button>
+              <button className="btn" onClick={() => setDemo(d => d ? { ...d, auto: !d.auto } : d)} aria-pressed={demo.auto}>{demo.auto ? <><Pause size={15} /> Hold here</> : <><Play size={15} /> Auto play</>}</button>
+              <button className="btn btn-primary" onClick={() => goScene(demo.step + 1)}>{demo.step === SCENES.length - 1 ? 'Finish' : 'Next'} <ChevronRight size={16} /></button>
+              <button className="btn" onClick={stopDemo} aria-label="End demo" style={{ color: 'var(--muted)' }}>End</button>
+            </div>
+          </div>
+        )}
         <p style={{ margin: 0, fontSize: 12, color: 'var(--faint)', lineHeight: 1.55 }}>Sensor readings are simulated: no rig is fitted yet. The rigs, holes, rock (from real core photos), speeds, best crews, bits, contract rates and costs are XPLORIX&rsquo;s real record. Copilot runs on rules today; the launch version adds trained models behind the same agent.</p>
       </div>
     </div>
@@ -617,3 +685,15 @@ function VoiceHelp({ voice, lang, mode, onTest }: { voice: ReturnType<typeof use
     </div>
   )
 }
+
+/* The investor demo: about 1½ minutes, best moments first. */
+const SCENES: { kind: Advice['kind'] | 'intro' | 'ask' | 'proof'; rig: string; title: string; note: string; line?: string; ask?: string }[] = [
+  { kind: 'intro', rig: 'RIG-001', title: 'Copilot is added to Pulse', note: 'It now reads all 6 rigs, 48 readings every second, and tells the crew what to do.', line: 'XPLORIX Copilot is on. I am reading all six rigs, every second.' },
+  { kind: 'blocking', rig: 'CP-01', title: 'A bit is starting to block', note: 'Copilot sees it in the pressure and torque before the crew feels it, and fixes it with one tap.' },
+  { kind: 'stop', rig: 'RIG-001', title: 'Geology GPS: stop the hole early', note: 'No ore target left below, so the hole can stop now and save 45 m of drilling.' },
+  { kind: 'engine', rig: 'RIG-002', title: 'Engine losing its cooling', note: 'Caught early from the temperature trend, before a breakdown stops the rig.' },
+  { kind: 'standby', rig: 'CP-02', title: 'Client standby is money', note: 'Copilot logs the client’s standby as billable time, so it is not lost.' },
+  { kind: 'pump', rig: 'RIG-003', title: 'Pump wearing out', note: 'Service booked at the next trip, before the pump fails in the hole.' },
+  { kind: 'ask', rig: 'RIG-002', title: 'The crew can just ask', note: 'Ask by voice or text, in English, Arabic, Hindi or Urdu.', ask: 'What should I do now?' },
+  { kind: 'proof', rig: 'RIG-001', title: 'Every fix is checked', note: 'After the crew acts, Copilot watches the readings and records whether it worked.', line: 'Every fix is checked against the readings, so the crew can trust the advice.' },
+]

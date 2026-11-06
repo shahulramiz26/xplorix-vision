@@ -24,13 +24,27 @@ export type VoiceStatus = 'ok' | 'no-sound' | 'blocked' | 'unknown'
 
 const SPEECH: Record<Lang, string> = { en: 'en-GB', ar: 'ar-SA', hi: 'hi-IN', ur: 'ur-PK' }
 
-/* Rig codes read the way people say them: "RIG-002" → "Rig 2", "CP-01" → "C P 1". */
-export function speakable(text: string) {
+/* Codes and units read in the language being spoken. English letters inside
+   an Arabic, Hindi or Urdu sentence make the voice stop and switch, which
+   sounds like a break, so they are turned into that language's words. */
+const WORDS: Record<Lang, { rig: string; hole: string; letters: (a: string) => string; m: string; kN: string; rpm: string; lmin: string; deg: string; bar: string; sar: string; h: string; pct: string }> = {
+  en: { rig: 'Rig', hole: 'hole', letters: a => a.split('').join(' '), m: 'metres', kN: 'kilonewtons', rpm: 'R P M', lmin: 'litres a minute', deg: 'degrees', bar: 'bar', sar: 'riyals', h: 'hours', pct: 'percent' },
+  ar: { rig: 'الحفارة', hole: 'البئر', letters: a => a.split('').map(c => ({ C: 'سي', P: 'بي', Q: 'كيو', R: 'آر', D: 'دي', H: 'إتش' } as Record<string, string>)[c] ?? c).join(' '), m: 'متر', kN: 'كيلو نيوتن', rpm: 'دورة في الدقيقة', lmin: 'لتر في الدقيقة', deg: 'درجة', bar: 'بار', sar: 'ريال', h: 'ساعة', pct: 'بالمئة' },
+  hi: { rig: 'रिग', hole: 'होल', letters: a => a.split('').map(c => ({ C: 'सी', P: 'पी', Q: 'क्यू', R: 'आर', D: 'डी', H: 'एच' } as Record<string, string>)[c] ?? c).join(' '), m: 'मीटर', kN: 'किलो न्यूटन', rpm: 'आर पी एम', lmin: 'लीटर प्रति मिनट', deg: 'डिग्री', bar: 'बार', sar: 'रियाल', h: 'घंटे', pct: 'प्रतिशत' },
+  ur: { rig: 'رگ', hole: 'ہول', letters: a => a.split('').map(c => ({ C: 'سی', P: 'پی', Q: 'کیو', R: 'آر', D: 'ڈی', H: 'ایچ' } as Record<string, string>)[c] ?? c).join(' '), m: 'میٹر', kN: 'کلو نیوٹن', rpm: 'آر پی ایم', lmin: 'لیٹر فی منٹ', deg: 'ڈگری', bar: 'بار', sar: 'ریال', h: 'گھنٹے', pct: 'فیصد' },
+}
+export function speakable(text: string, lang: Lang = 'en') {
+  const w = WORDS[lang]
   return text
-    .replace(/\bRIG-0*(\d+)/g, 'Rig $1')
-    .replace(/\bDH-0*(\d+)/g, 'hole $1')
-    .replace(/\b([A-Z]{2})-0*(\d+)/g, (_, a: string, n: string) => `${a.split('').join(' ')} ${n}`)
-    .replace(/\bkN\b/g, 'kilonewtons').replace(/\brpm\b/g, 'R P M').replace(/L\/min/g, 'litres a minute').replace(/°C/g, ' degrees')
+    .replace(/\bRIG-0*(\d+)\.?/g, `${w.rig} $1،`.replace('،', lang === 'en' || lang === 'hi' ? ',' : '،'))
+    .replace(/\bDH-0*(\d+)/g, `${w.hole} $1`)
+    .replace(/\b([A-Z]{2})-0*(\d+)\.?/g, (_, a: string, n: string) => `${w.letters(a)} ${n}${lang === 'ar' || lang === 'ur' ? '،' : ','}`)
+    .replace(/SAR\s?([\d,.]+)/g, `$1 ${w.sar}`)
+    .replace(/(\d)\s?m\b/g, `$1 ${w.m}`)
+    .replace(/(\d)\s?h\b/g, `$1 ${w.h}`)
+    .replace(/\bkN\b/g, w.kN).replace(/\brpm\b/g, w.rpm).replace(/L\/min/g, w.lmin).replace(/\s?°C/g, ` ${w.deg}`).replace(/\bbar\b/g, w.bar).replace(/(\d)\s?%/g, `$1 ${w.pct}`)
+    .replace(/\s·\s/g, lang === 'ar' || lang === 'ur' ? '، ' : ', ')
+    .replace(/[,،]\s*([:.])/g, '$1').replace(/\s{2,}/g, ' ').trim()
 }
 
 function voiceFor(lang: string) {
@@ -83,16 +97,14 @@ export function useVoice(lang: Lang, mode: VoiceMode) {
     try {
       const synth = window.speechSynthesis
       synth.cancel()                                    // clears Chrome's stuck queue
-      const u = new SpeechSynthesisUtterance(speakable(l.text))
-      u.lang = SPEECH[speakIn]; u.rate = 0.95
+      const u = new SpeechSynthesisUtterance(speakable(l.text, speakIn))
+      u.lang = SPEECH[speakIn]; u.rate = speakIn === 'en' ? 1.0 : 0.95
       const v = voiceFor(SPEECH[speakIn]); if (v) u.voice = v
       u.onstart = () => setStatus('ok')
       u.onend = done
       u.onerror = (e: SpeechSynthesisErrorEvent) => { if (e.error === 'not-allowed') setStatus('blocked'); done() }
       synth.speak(u)
-      synth.resume()
-      // Chrome stops long speech after ~15 s unless nudged
-      keep.current = window.setInterval(() => { try { if (synth.speaking) { synth.pause(); synth.resume() } } catch { /* */ } }, 10000)
+      // No pause/resume nudging: on most voices it is heard as a break in the middle of a sentence
       timer.current = window.setTimeout(() => { if (busy.current) { synth.cancel(); done() } }, Math.min(25000, 3000 + l.text.length * 100))
     } catch { done() }
   }, [ok, speakIn])

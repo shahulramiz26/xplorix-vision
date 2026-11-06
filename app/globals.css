@@ -75,6 +75,7 @@ button, input, select { font-family: inherit; }
 .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .rigbody { display: grid; grid-template-columns: minmax(0, 1fr) 236px; gap: 16px; }
 .rail { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; display: grid; gap: 12px; align-content: start; padding-bottom: 4px; }
+.work.demo .rail { max-height: calc(100vh - 128px); }
 @media (max-width: 1480px) { .fleet { grid-template-columns: repeat(3, minmax(0, 1fr)); } .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1240px) { .work, .work.off { grid-template-columns: minmax(0, 1fr); } .rail { position: static; max-height: none; order: -1; } }
 @media (max-width: 900px) { .app { grid-template-columns: minmax(0, 1fr); } .sidebar { display: none !important; } .only-narrow { display: inline-flex !important; } .gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rigbody { grid-template-columns: minmax(0, 1fr); } .fleet { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
