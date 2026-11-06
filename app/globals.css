@@ -1,0 +1,315 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── XPLORIX DESIGN SYSTEM ─────────────────────────────────────────────────
+   Primary:  Orange  #F97316  (actions, highlights, active states)
+   Secondary: Electric Blue #3B82F6 / #60A5FA (data, charts, info)
+   Background: Deep black #080B10 → #0D1117 → #111827
+   Borders: #1E293B
+   Text: #F8FAFC / #94A3B8 / #64748B
+──────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --orange:        #F97316;
+  --orange-dim:    #EA580C;
+  --orange-glow:   rgba(249,115,22,0.15);
+  --blue:          #3B82F6;
+  --blue-bright:   #60A5FA;
+  --blue-glow:     rgba(59,130,246,0.15);
+  --green:         #10B981;
+  --red:           #EF4444;
+  --amber:         #F59E0B;
+  --purple:        #8B5CF6;
+  --cyan:          #06B6D4;
+
+  --bg:            #080B10;
+  --bg2:           #0D1117;
+  --bg3:           #111827;
+  --bg4:           #1A2234;
+
+  --border:        #1E293B;
+  --border-dim:    rgba(30,41,59,0.5);
+
+  --text:          #F8FAFC;
+  --muted:         #94A3B8;
+  --dim:           #64748B;
+  --faint:         #334155;
+}
+
+/* ── APP THEME ─────────────────────────────────────────────────────────────
+   The app screens (Company Admin, Client Portal, Supervisor) read every colour
+   from these variables. Dark is the default; the light set is switched on by
+   data-theme="light" on <html>. The landing and sign-in pages do not use them
+   and stay dark.
+──────────────────────────────────────────────────────────────────────────── */
+/* FIELD SLATE (Oct 2026). Quiet slate chrome around the record: a dark slate
+   sidebar in both themes, white cards with thin slate borders, slate text, and
+   XPLORIX orange kept for the main action, the active screen and alerts.
+   The page background (warm paper in light, near-black in dark) and the logo
+   are the brand's and stay as they were. */
+:root {
+  --x-bg: #080B10;  --x-card: #0F151D;  --x-side: #111A25;
+  --x-raised: #151D28;  --x-panel: #121A24;  --x-raised2: #1B2532;
+  --x-border: #1F2A37;  --x-border2: #263241;  --x-border3: #364152;
+  --x-text: #E8EDF3;  --x-muted: #A6B2C0;  --x-faint: #7E8A9A;  --x-dim2: #5D6878;  --x-dim: #3B4655;
+
+  --x-orange: #F97316;  --x-orange-d: #EA580C;  --x-orange-b: #FB923C;  --x-orange-p: #FDBA74;
+  --x-green: #22A06B;  --x-green-b: #4ADE80;  --x-green-d: #16A34A;  --x-good-text: #A7F3D0;
+  --x-red: #EF4444;  --x-red-b: #F87171;  --x-red-d: #DC2626;  --x-bad-text: #FECACA;
+  --x-amber: #F59E0B;  --x-yellow: #FACC15;
+  --x-blue: #5B8DEF;  --x-blue-b: #7FA6F2;  --x-blue-d: #3B6FD8;
+  --x-purple: #9B87F5;  --x-purple-b: #B4A5F8;
+  --x-teal: #2DB3A6;  --x-teal-d: #14918A;  --x-cyan: #22B8CF;  --x-pink: #EC4899;  --x-violet: #B265E0;
+
+  /* chart series */
+  --x-actual: #F97316;  --x-plan: #7E8A9A;  --x-forecast: #FDBA74;  --x-trips: #4B5666;
+
+  /* the sidebar: dark slate in both themes */
+  --x-side-text: #E2E8F0;  --x-side-muted: #A3B0C2;  --x-side-faint: #6E7C90;
+  --x-side-hover: rgba(255,255,255,0.06);  --x-side-active: rgba(255,255,255,0.09);  --x-side-line: rgba(255,255,255,0.08);
+
+  --x-radius: 10px;
+  --x-ov: 255,255,255;      /* the colour a surface is lifted with */
+  --x-shadow: 0,0,0;
+  --x-card-shadow: none;
+  --x-on-accent: #1A0D04;
+  color-scheme: dark;      /* native date pickers and scrollbars follow the theme */
+}
+
+html[data-theme="light"] {
+  /* Warm paper background, as on the website and the film; slate everything else. */
+  --x-bg: #F6EDE5;  --x-card: #FFFFFF;  --x-side: #1E293B;
+  --x-raised: #F8FAFC;  --x-panel: #FFFFFF;  --x-raised2: #F1F5F9;
+  --x-border: #E2E8F0;  --x-border2: #E2E8F0;  --x-border3: #CBD5E1;
+  --x-text: #0F172A;  --x-muted: #475569;  --x-faint: #5F6B7C;  --x-dim2: #94A3B8;  --x-dim: #CBD5E1;
+
+  --x-orange: #C2410C;  --x-orange-d: #9A3412;  --x-orange-b: #EA580C;  --x-orange-p: #C2410C;
+  --x-green: #047857;  --x-green-b: #059669;  --x-green-d: #065F46;  --x-good-text: #065F46;
+  --x-red: #DC2626;  --x-red-b: #DC2626;  --x-red-d: #B91C1C;  --x-bad-text: #991B1B;
+  --x-amber: #B45309;  --x-yellow: #A16207;
+  --x-blue: #2F64C4;  --x-blue-b: #2F64C4;  --x-blue-d: #1E4FA8;
+  --x-purple: #6D4FD1;  --x-purple-b: #6D4FD1;
+  --x-teal: #0D9488;  --x-teal-d: #0F766E;  --x-cyan: #0891B2;  --x-pink: #DB2777;  --x-violet: #9333EA;
+
+  --x-actual: #EA580C;  --x-plan: #64748B;  --x-forecast: #F59E0B;  --x-trips: #94A3B8;
+
+  --x-side-text: #F1F5F9;  --x-side-muted: #B6C2D2;  --x-side-faint: #8291A6;
+  --x-side-hover: rgba(255,255,255,0.07);  --x-side-active: rgba(255,255,255,0.10);  --x-side-line: rgba(255,255,255,0.09);
+
+  --x-ov: 15,23,42;
+  --x-shadow: 15,23,42;
+  --x-card-shadow: 0 1px 2px rgba(15,23,42,0.05);
+  --x-on-accent: #FFFFFF;
+  color-scheme: light;
+}
+html[data-theme="light"] body { background: var(--x-bg); color: var(--x-text); }
+html[data-theme="light"] .bg-grid-pattern { display: none; }
+/* The soft peach glow in two corners, fixed behind the app while it scrolls. */
+html[data-theme="light"] .xpl-app {
+  background-image:
+    radial-gradient(1100px 760px at 104% 104%, rgba(253,184,119,0.55) 0%, rgba(253,184,119,0) 62%),
+    radial-gradient(900px 640px at -6% -6%, rgba(255,211,174,0.6) 0%, rgba(255,211,174,0) 60%) !important;
+  background-attachment: fixed !important;
+}
+html[data-theme="light"] ::-webkit-scrollbar-track { background: var(--x-bg); }
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--x-dim); }
+html[data-theme="light"] ::selection { background: rgba(234,88,12,0.18); color: var(--x-text); }
+/* Field Slate type and figures (admin and geology shells). */
+.xpl-app { font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.xpl-app h1, .xpl-app h2, .xpl-app h3, .xpl-app h4 { font-family: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif; letter-spacing: -0.01em; }
+.xpl-num { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+html[data-theme="light"] h1, html[data-theme="light"] h2, html[data-theme="light"] h3,
+html[data-theme="light"] h4, html[data-theme="light"] h5, html[data-theme="light"] h6 { color: var(--x-text); }
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+
+/* ── SELECTION ── */
+::selection { background: rgba(249,115,22,0.2); color: var(--text); }
+
+/* ── FOCUS ── */
+*:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── TYPOGRAPHY ── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+/* ── UTILITY CLASSES ── */
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--orange), #F59E0B);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-blue {
+  background: linear-gradient(135deg, var(--blue), var(--blue-bright));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+.glow-orange { box-shadow: 0 0 20px rgba(249,115,22,0.2); }
+.glow-blue   { box-shadow: 0 0 20px rgba(59,130,246,0.2); }
+
+/* Glass card */
+.glass {
+  background: rgba(13,17,23,0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+}
+
+/* ── TAILWIND OVERRIDES for new theme ── */
+
+/* Primary button → Orange */
+.btn-primary {
+  background: linear-gradient(135deg, var(--orange), var(--orange-dim));
+  color: white;
+  border: none;
+  box-shadow: 0 4px 20px rgba(249,115,22,0.25);
+  transition: all 0.25s;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 30px rgba(249,115,22,0.4);
+}
+
+/* Active nav → Orange */
+.nav-active {
+  background: linear-gradient(90deg, rgba(249,115,22,0.15), transparent) !important;
+  border-left: 2px solid var(--orange) !important;
+  color: white !important;
+}
+.nav-active .nav-icon { color: var(--orange) !important; }
+
+/* Cards */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.card:hover {
+  border-color: rgba(249,115,22,0.2);
+}
+
+/* Inputs */
+.input-base {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-base:focus {
+  border-color: rgba(249,115,22,0.4);
+  box-shadow: 0 0 0 3px rgba(249,115,22,0.08);
+  outline: none;
+}
+
+/* Status badges */
+.badge-green   { background: rgba(16,185,129,0.1);  border: 1px solid rgba(16,185,129,0.2);  color: #10B981; }
+.badge-orange  { background: rgba(249,115,22,0.1);  border: 1px solid rgba(249,115,22,0.2);  color: var(--orange); }
+.badge-blue    { background: rgba(59,130,246,0.1);  border: 1px solid rgba(59,130,246,0.2);  color: var(--blue-bright); }
+.badge-red     { background: rgba(239,68,68,0.1);   border: 1px solid rgba(239,68,68,0.2);   color: #EF4444; }
+.badge-purple  { background: rgba(139,92,246,0.1);  border: 1px solid rgba(139,92,246,0.2);  color: #8B5CF6; }
+.badge-amber   { background: rgba(245,158,11,0.1);  border: 1px solid rgba(245,158,11,0.2);  color: #F59E0B; }
+
+/* Pulse dot */
+.pulse-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--orange);
+  animation: xpl-pulse 2s infinite;
+}
+.pulse-dot-green { background: var(--green); }
+.pulse-dot-blue  { background: var(--blue); }
+
+@keyframes xpl-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(1.4); }
+}
+
+/* Section divider */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+/* Recharts tooltip override */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--bg2) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  color: var(--text) !important;
+}
+
+/* Table rows */
+.table-row-hover:hover { background: rgba(249,115,22,0.03); }
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg4) 50%, var(--bg3) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+  border-radius: 8px;
+}
+@keyframes skeleton-loading {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Noise overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.3;
+}
+
+/* Named Tailwind colours still used on a few older screens: the 400 shades are
+   made for dark surfaces, so the light theme swaps in a readable shade. */
+html[data-theme="light"] .text-emerald-400 { color: #059669; }
+html[data-theme="light"] .text-amber-400 { color: #B45309; }
+html[data-theme="light"] .text-red-400 { color: #DC2626; }
+html[data-theme="light"] .text-blue-400, html[data-theme="light"] .group:hover .group-hover\:text-blue-400 { color: #2563EB; }
+html[data-theme="light"] .text-purple-400 { color: #7C3AED; }
+
+/* Field Slate: motion only where it helps, and none when the reader asks for none. */
+@media (prefers-reduced-motion: reduce) {
+  .xpl-app *, .xpl-app *::before, .xpl-app *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}

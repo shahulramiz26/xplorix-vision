@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                String   @id @default(cuid())
+  name              String
+  industryType      String   // EXPLORATION or BLAST_HOLE
+  country           String
+  email             String   @unique
+  phone             String
+  rigCount          Int
+  trialStartDate    DateTime @default(now())
+  trialEndDate      DateTime
+  subscriptionStatus String  @default("TRIAL") // TRIAL, ACTIVE, EXPIRED
+  dailyRate         Decimal  @default(10.00)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  users             User[]
+  projects          Project[]
+  rigs              Rig[]
+  drillers          Driller[]
+  supervisors       Supervisor[]
+  bits              Bit[]
+  drillingLogs      DrillingLog[]
+  maintenanceLogs   MaintenanceLog[]
+  billingCycles     BillingCycle[]
+}
+
+model User {
+  id                String   @id @default(cuid())
+  companyId         String
+  email             String
+  username          String?  @unique
+  passwordHash      String
+  name              String
+  role              String   // COMPANY_ADMIN, SUPERVISOR
+  status            String   @default("ACTIVE") // ACTIVE, INACTIVE
+  mustChangePassword Boolean @default(false)
+  tempPassword      String?
+  emailVerified     DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  company           Company  @relation(fields: [companyId], references: [id])
+  
+  @@unique([companyId, email])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  location    String
+  status      String   @default("ACTIVE") // ACTIVE, ON_HOLD, COMPLETED
+  clientName  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  company     Company  @relation(fields: [companyId], references: [id])
+  rigs        Rig[]
+  drillers    Driller[]
+  supervisors Supervisor[]
+  bits        Bit[]
+}
+
+model Rig {
+  id            String   @id @default(cuid())
+  companyId     String
+  projectId     String?
+  rigIdCustom   String   // User-defined ID
+  rigType       String   // CORE, RC, BLAST_HOLE
+  status        String   @default("INACTIVE") // ACTIVE, INACTIVE
+  isActiveBillable Boolean @default(false)
+  activatedAt   DateTime?
+  deactivatedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  company       Company  @relation(fields: [companyId], references: [id])
+  project       Project? @relation(fields: [projectId], references: [id])
+}
+
+model Driller {
+  id              String   @id @default(cuid())
+  companyId       String
+  projectId       String?
+  name            String
+  drillerType     String   // CORE, RC, BLAST_HOLE
+  phone           String
+  emergencyContact String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  company         Company  @relation(fields: [companyId], references: [id])
+  project         Project? @relation(fields: [projectId], references: [id])
+}
+
+model Supervisor {
+  id              String   @id @default(cuid())
+  companyId       String
+  projectId       String?
+  name            String
+  supervisorType  String   // CORE, RC, BLAST_HOLE
+  phone           String
+  emergencyContact String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  company         Company  @relation(fields: [companyId], references: [id])
+  project         Project? @relation(fields: [projectId], references: [id])
+}
+
+model Bit {
+  id            String   @id @default(cuid())
+  companyId     String
+  projectId     String?
+  bitIdCustom   String   // User-defined ID
+  bitType       String   // SURFACE_SET, IMPREGNATED, PDC_CORE, DTH, TRICONE
+  bitSize       String
+  manufacturer  String
+  purchasePrice Decimal
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  company       Company  @relation(fields: [companyId], references: [id])
+  project       Project? @relation(fields: [projectId], references: [id])
+}
+
+model DrillingLog {
+  id                String   @id @default(cuid())
+  companyId         String
+  projectId         String
+  rigId             String
+  drillerId         String
+  supervisorId      String
+  shift             String   // DAY, NIGHT
+  holeNumber        String
+  crewCount         Int
+  date              DateTime
+  drillingHours     Decimal
+  downtimeHours     Decimal
+  metersDrilled     Decimal
+  coreRecovery      Decimal
+  holeSize          String
+  formationType     String
+  bitId             String?
+  bitMetersDrilled  Decimal?
+  completionType    String?
+  fuelL             Decimal?
+  waterL            Decimal?
+  additivesKg       Decimal?
+  incidentType      String?
+  incidentSeverity  String?
+  photos            String[]
+  documents         String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  company           Company  @relation(fields: [companyId], references: [id])
+}
+
+model MaintenanceLog {
+  id                String   @id @default(cuid())
+  companyId         String
+  projectId         String
+  rigId             String
+  supervisorId      String
+  shift             String
+  date              DateTime
+  maintenanceType   String
+  maintenanceHours  Decimal
+  componentAffected String
+  actionTaken       String
+  engineOilL        Decimal?
+  hydraulicOilL     Decimal?
+  transmissionOilL  Decimal?
+  photos            String[]
+  documents         String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  company           Company  @relation(fields: [companyId], references: [id])
+}
+
+model BillingCycle {
+  id              String   @id @default(cuid())
+  companyId       String
+  month           Int
+  year            Int
+  startDate       DateTime
+  endDate         DateTime
+  totalActiveDays Int      @default(0)
+  totalAmount     Decimal  @default(0)
+  status          String   @default("PENDING") // PENDING, PAID, OVERDUE
+  invoiceUrl      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  company         Company  @relation(fields: [companyId], references: [id])
+}
